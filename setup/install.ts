@@ -57,11 +57,13 @@ async function runCommand(
 
 async function checkPlatform(): Promise<boolean> {
   const platform = process.platform;
-  if (platform === "darwin") {
-    console.log(`  ${PASS} Platform: macOS (${platform})`);
+  const supported = ["darwin", "win32", "linux"];
+  if (supported.includes(platform)) {
+    const names: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
+    console.log(`  ${PASS} Platform: ${names[platform] || platform} (${platform})`);
     return true;
   }
-  console.log(`  ${FAIL} Platform: ${platform} - this project requires macOS (darwin)`);
+  console.log(`  ${FAIL} Platform: ${platform} - supported platforms: macOS, Windows, Linux`);
   return false;
 }
 
@@ -87,8 +89,9 @@ async function checkClaude(): Promise<boolean> {
     }
   }
 
-  // Fall back to which claude
-  const which = await runCommand(["which", "claude"]);
+  // Fall back to which/where claude
+  const findCmd = process.platform === "win32" ? ["where", "claude"] : ["which", "claude"];
+  const which = await runCommand(findCmd);
   if (which.ok) {
     const version = await runCommand(["claude", "--version"]);
     console.log(
@@ -163,7 +166,7 @@ async function main() {
   console.log(`\n${cyan("  [1/4] Checking prerequisites...")}`);
   const platformOk = await checkPlatform();
   if (!platformOk) {
-    console.log(`\n  ${red("Setup aborted: macOS required.")}`);
+    console.log(`\n  ${red("Setup aborted: unsupported platform.")}`);
     process.exit(1);
   }
 
@@ -210,7 +213,11 @@ async function main() {
   steps.push(`Verify configuration: ${cyan("bun run setup:verify")}`);
   steps.push(`Test Telegram connection: ${cyan("bun run test:telegram")}`);
   steps.push(`Test Supabase connection: ${cyan("bun run test:supabase")}`);
-  steps.push(`Configure launchd services: ${cyan("bun run setup:launchd -- --service all")}`);
+  if (process.platform === "darwin") {
+    steps.push(`Configure launchd services: ${cyan("bun run setup:launchd -- --service all")}`);
+  } else {
+    steps.push(`Configure services: ${cyan("bun run setup:services -- --service all")}`);
+  }
   steps.push(`Start the bot: ${cyan("bun run start")}`);
 
   steps.forEach((step, i) => {

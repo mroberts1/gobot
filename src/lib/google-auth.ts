@@ -1,35 +1,48 @@
 /**
- * Go - Google API Direct Access
+ * Go - Google API Direct Access (Cross-Platform)
  *
- * Reads OAuth tokens from macOS Keychain and auto-refreshes when expired.
+ * Reads OAuth tokens and auto-refreshes when expired.
  * This bypasses both Claude CLI subprocesses and MCP servers entirely,
  * making API calls instant (<1s) instead of 60-180s via subprocess.
  *
  * WHY THIS EXISTS:
  * Claude CLI subprocesses initialize ALL configured MCP servers on startup.
- * From launchd (background), this takes 60-180s and frequently times out.
+ * From background services, this takes 60-180s and frequently times out.
  * Direct API calls using cached OAuth tokens are instant and reliable.
  *
- * REQUIREMENTS:
- * - macOS (uses `security` CLI for keychain access)
- * - Google OAuth tokens stored in keychain by a Google MCP server
- *   (gmail-business or google-workspace extensions)
- * - Refresh endpoint: google-workspace-extension.geminicli.com
+ * PLATFORM SUPPORT:
+ * - macOS: Reads/writes tokens via macOS Keychain (`security` CLI)
+ * - Windows/Linux: Reads/writes tokens to a local JSON file
  *
- * KEYCHAIN FORMAT:
+ * TOKEN SOURCE:
+ * Tokens are created by Google MCP servers (gmail-business, google-workspace)
+ * during initial OAuth setup. This module reads those cached tokens.
+ *
+ * KEYCHAIN FORMAT (macOS):
  * Service: "gmail-business-oauth" or "google-workspace-oauth"
  * Account: "main-account"
  * Value: JSON { serverName, token: { accessToken, refreshToken, expiresAt, scope }, updatedAt }
+ *
+ * FILE FORMAT (Windows/Linux):
+ * Stored in config/.google-tokens.json:
+ * { "gmail-business-oauth": { serverName, token: { ... }, updatedAt }, ... }
  */
 
 import { spawn } from "bun";
+import { readFile, writeFile, mkdir } from "fs/promises";
+import { join, dirname } from "path";
+import { existsSync } from "fs";
 
-// Well-known keychain service names for Google MCP servers
+// Well-known service names for Google MCP servers
 export const KEYCHAIN_GMAIL = "gmail-business-oauth";
 export const KEYCHAIN_CALENDAR = "google-workspace-oauth";
 const KEYCHAIN_ACCOUNT = "main-account";
 const REFRESH_ENDPOINT =
   "https://google-workspace-extension.geminicli.com/refreshToken";
+
+const IS_MACOS = process.platform === "darwin";
+const PROJECT_ROOT = process.env.GO_PROJECT_ROOT || process.cwd();
+const TOKEN_FILE = join(PROJECT_ROOT, "config", ".google-tokens.json");
 
 export interface GoogleToken {
   accessToken: string;
@@ -39,11 +52,40 @@ export interface GoogleToken {
   tokenType?: string;
 }
 
-/**
- * Read an OAuth token from the macOS Keychain.
- * Throws if the keychain entry doesn't exist or can't be parsed.
- */
-export async function getKeychainToken(service: string): Promise<GoogleToken> {
+interface TokenFileEntry {
+  serverName: string;
+  token: GoogleToken;
+  updatedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Token File Storage (Windows/Linux)
+// ---------------------------------------------------------------------------
+
+async function readTokenFile(): Promise<Record<string, TokenFileEntry>> {
+  try {
+    const content = await readFile(TOKEN_FILE, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+
+async function writeTokenFile(
+  data: Record<string, TokenFileEntry>
+): Promise<void> {
+  const dir = dirname(TOKEN_FILE);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+  await writeFile(TOKEN_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// macOS Keychain Storage
+// ---------------------------------------------------------------------------
+
+async function readKeychainEntry(service: string): Promise<GoogleToken> {
   const proc = spawn({
     cmd: [
       "security",
@@ -69,10 +111,7 @@ export async function getKeychainToken(service: string): Promise<GoogleToken> {
   return data.token as GoogleToken;
 }
 
-/**
- * Save an updated OAuth token back to the macOS Keychain.
- */
-async function saveKeychainToken(
+async function writeKeychainEntry(
   service: string,
   token: GoogleToken
 ): Promise<void> {
@@ -81,7 +120,7 @@ async function saveKeychainToken(
     token,
     updatedAt: Date.now(),
   });
-  // Delete existing entry then re-add (security CLI has no in-place update)
+  // Delete existing then re-add (security CLI has no in-place update)
   const del = spawn({
     cmd: [
       "security",
@@ -94,7 +133,7 @@ async function saveKeychainToken(
     stdout: "pipe",
     stderr: "pipe",
   });
-  await del.exited; // ignore errors (might not exist)
+  await del.exited; // ignore errors (entry might not exist)
   const add = spawn({
     cmd: [
       "security",
@@ -112,6 +151,58 @@ async function saveKeychainToken(
   if ((await add.exited) !== 0) {
     console.error(`Warning: Failed to save refreshed token for ${service}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Platform-Agnostic API
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an OAuth token from the platform credential store.
+ * - macOS: reads from Keychain
+ * - Windows/Linux: reads from config/.google-tokens.json
+ *
+ * Throws if the token doesn't exist.
+ */
+export async function getKeychainToken(
+  service: string
+): Promise<GoogleToken> {
+  if (IS_MACOS) {
+    return readKeychainEntry(service);
+  }
+
+  // File-based storage
+  const tokens = await readTokenFile();
+  const entry = tokens[service];
+  if (!entry || !entry.token) {
+    throw new Error(
+      `No token found for "${service}" in ${TOKEN_FILE}. ` +
+        `Set up the corresponding Google MCP server first, then copy the ` +
+        `OAuth token to ${TOKEN_FILE}. See docs/architecture.md for format.`
+    );
+  }
+  return entry.token;
+}
+
+/**
+ * Save an updated OAuth token back to the platform credential store.
+ */
+export async function saveKeychainToken(
+  service: string,
+  token: GoogleToken
+): Promise<void> {
+  if (IS_MACOS) {
+    return writeKeychainEntry(service, token);
+  }
+
+  // File-based storage
+  const tokens = await readTokenFile();
+  tokens[service] = {
+    serverName: service,
+    token,
+    updatedAt: Date.now(),
+  };
+  await writeTokenFile(tokens);
 }
 
 /**
@@ -161,7 +252,7 @@ export async function getValidAccessToken(service: string): Promise<string> {
 }
 
 /**
- * Check if Google OAuth keychain tokens are available.
+ * Check if Google OAuth tokens are available for a given service.
  * Does not validate the token -- just checks if the entry exists.
  */
 export async function isGoogleAuthAvailable(

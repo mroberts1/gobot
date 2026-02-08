@@ -171,35 +171,68 @@ async function checkSupabase() {
   }
 }
 
-async function checkLaunchdServices() {
-  console.log(`\n${cyan("  [4/5] launchd Services")}`);
-
-  const result = await runCommand(["launchctl", "list"]);
-  if (!result.ok) {
-    record("launchctl", "fail", "Could not query launchctl");
-    return;
-  }
-
+async function checkServices() {
   const services = ["telegram-relay", "smart-checkin", "morning-briefing", "watchdog"];
 
-  for (const service of services) {
-    const label = `com.go.${service}`;
-    const line = result.stdout.split("\n").find((l) => l.includes(label));
+  if (process.platform === "darwin") {
+    console.log(`\n${cyan("  [4/5] launchd Services")}`);
 
-    if (line) {
-      const parts = line.trim().split(/\s+/);
-      const pid = parts[0];
-      const exitCode = parts[1];
+    const result = await runCommand(["launchctl", "list"]);
+    if (!result.ok) {
+      record("launchctl", "fail", "Could not query launchctl");
+      return;
+    }
 
-      if (pid !== "-") {
-        record(service, "pass", `Running (PID: ${pid})`);
-      } else if (exitCode === "0") {
-        record(service, "pass", `Loaded, last exit: 0 ${dim("(waiting for schedule)")}`);
+    for (const service of services) {
+      const label = `com.go.${service}`;
+      const line = result.stdout.split("\n").find((l) => l.includes(label));
+
+      if (line) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[0];
+        const exitCode = parts[1];
+
+        if (pid !== "-") {
+          record(service, "pass", `Running (PID: ${pid})`);
+        } else if (exitCode === "0") {
+          record(service, "pass", `Loaded, last exit: 0 ${dim("(waiting for schedule)")}`);
+        } else {
+          record(service, "warn", `Loaded but last exit code: ${exitCode}`);
+        }
       } else {
-        record(service, "warn", `Loaded but last exit code: ${exitCode}`);
+        record(service, "skip", "Not installed");
+      }
+    }
+  } else {
+    console.log(`\n${cyan("  [4/5] Background Services")}`);
+
+    // Check PM2 for daemon services
+    const pm2Result = await runCommand(["npx", "pm2", "jlist"]);
+    if (pm2Result.ok) {
+      try {
+        const pm2List = JSON.parse(pm2Result.stdout) as Array<{ name: string; pm2_env?: { status?: string }; pid?: number }>;
+        for (const service of services) {
+          const pm2Name = `go-${service}`;
+          const proc = pm2List.find((p) => p.name === pm2Name);
+          if (proc) {
+            const status = proc.pm2_env?.status || "unknown";
+            if (status === "online") {
+              record(service, "pass", `Running via PM2 (PID: ${proc.pid})`);
+            } else {
+              record(service, "warn", `PM2 status: ${status}`);
+            }
+          } else {
+            record(service, "skip", "Not registered in PM2");
+          }
+        }
+      } catch {
+        record("PM2", "warn", "Could not parse PM2 output");
       }
     } else {
-      record(service, "skip", "Not installed");
+      record("PM2", "skip", "PM2 not installed (npm install -g pm2)");
+      for (const service of services) {
+        record(service, "skip", "No service manager detected");
+      }
     }
   }
 }
@@ -241,7 +274,7 @@ async function main() {
   checkRequiredEnv();
   await checkTelegram();
   await checkSupabase();
-  await checkLaunchdServices();
+  await checkServices();
   checkOptionalIntegrations();
 
   // Summary

@@ -1,6 +1,6 @@
 # Go — Always-On AI Telegram Bot
 
-An always-on Telegram bot powered by Claude Code with multi-agent routing, proactive check-ins, persistent memory, and morning briefings. Built for macOS.
+An always-on Telegram bot powered by Claude Code with multi-agent routing, proactive check-ins, persistent memory, and morning briefings. Works on macOS, Windows, and Linux.
 
 ## What It Does
 
@@ -20,7 +20,7 @@ You (Telegram) → Go Bot → Claude Code → Response → You (Telegram)
 - **Memory**: Persistent facts, goals, and conversation history via Supabase
 - **Proactive**: Smart check-ins that know when to reach out (and when not to)
 - **Briefings**: Daily morning summary with goals, calendar, and AI news
-- **Always-On**: Survives reboots via macOS launchd services
+- **Always-On**: Survives reboots via launchd (macOS), PM2 + Task Scheduler (Windows), or PM2 + cron (Linux)
 - **Resilient**: Falls back to OpenRouter/Ollama when Claude is unavailable
 - **Voice** (optional): Text-to-speech replies and phone calls via ElevenLabs
 
@@ -28,9 +28,10 @@ You (Telegram) → Go Bot → Claude Code → Response → You (Telegram)
 
 ### Prerequisites
 
-- **macOS** (for launchd always-on services)
+- **macOS, Windows, or Linux**
 - **[Bun](https://bun.sh)** runtime (`curl -fsSL https://bun.sh/install | bash`)
 - **[Claude Code](https://claude.ai/claude-code)** CLI installed and authenticated
+- **Windows/Linux only**: [PM2](https://pm2.keymetrics.io/) for daemon services (`npm install -g pm2`)
 
 ### Setup
 
@@ -62,7 +63,7 @@ That's it. Claude Code reads the `CLAUDE.md` file and walks you through a guided
 | Telegram SDK | [grammY](https://grammy.dev) |
 | AI Backend | [Claude Code](https://claude.ai/claude-code) CLI |
 | Database | [Supabase](https://supabase.com) (PostgreSQL) |
-| Always-On | macOS launchd |
+| Always-On | macOS launchd / PM2 + Task Scheduler / PM2 + cron |
 | Voice (opt.) | [ElevenLabs](https://elevenlabs.io) |
 | Transcription (opt.) | [Google Gemini](https://ai.google.dev) |
 | AI News (opt.) | [Grok/xAI](https://x.ai) |
@@ -83,13 +84,14 @@ That's it. Claude Code reads the `CLAUDE.md` file and walks you through a guided
                     │  - Logs      │
                     └──────────────┘
 
-┌─────────────────────────────────────┐
-│  launchd Services                    │
-│  ├── com.go.telegram-relay (daemon)  │
-│  ├── com.go.smart-checkin (periodic) │
-│  ├── com.go.morning-briefing (daily) │
-│  └── com.go.watchdog (hourly)        │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  Background Services                          │
+│  macOS: launchd  │  Win/Linux: PM2 + scheduler│
+│  ├── telegram-relay (daemon)                  │
+│  ├── smart-checkin (periodic)                 │
+│  ├── morning-briefing (daily)                 │
+│  └── watchdog (hourly)                        │
+└──────────────────────────────────────────────┘
 ```
 
 ## Course Modules
@@ -105,7 +107,7 @@ This repo doubles as a learning resource. Each module covers one architectural l
 | 04 | [Multi-Agent System](docs/04-multi-agent-system.md) | Reasoning frameworks, agent routing |
 | 05 | [Smart Check-ins](docs/05-smart-checkins.md) | Proactive AI, context gathering |
 | 06 | [Morning Briefing](docs/06-morning-briefing.md) | Data aggregation, formatting |
-| 07 | [launchd Always-On](docs/07-launchd-always-on.md) | macOS services, sleep survival |
+| 07 | [Always-On Services](docs/07-launchd-always-on.md) | Background services (launchd, PM2, cron) |
 | 08 | [Optional Integrations](docs/08-optional-integrations.md) | Voice, fallback, extensibility |
 | 09 | [Hooks & Security](docs/09-hooks-security.md) | Message redaction, validation |
 | 10 | [Customization Guide](docs/10-customization-guide.md) | Add agents, integrations |
@@ -122,11 +124,12 @@ bun run checkin            # Run smart check-in
 bun run briefing           # Run morning briefing
 bun run watchdog           # Run health check
 bun run setup              # Install dependencies
-bun run setup:launchd      # Configure launchd services
+bun run setup:launchd      # Configure launchd services (macOS)
+bun run setup:services     # Configure services (Windows/Linux)
 bun run setup:verify       # Full health check
 bun run test:telegram      # Test Telegram connectivity
 bun run test:supabase      # Test Supabase connectivity
-bun run uninstall          # Remove launchd services
+bun run uninstall          # Remove all services
 ```
 
 ## License

@@ -235,6 +235,12 @@ async function main() {
   console.log(bold("  Go Telegram Bot - launchd Configuration"));
   console.log(dim("  ========================================"));
 
+  if (process.platform !== "darwin") {
+    console.log(`\n  ${red("launchd is macOS-only.")}`);
+    console.log(`  On Windows/Linux, use: ${cyan("bun run setup/configure-services.ts --service all")}`);
+    process.exit(1);
+  }
+
   // Parse --service flag
   const args = process.argv.slice(2);
   const serviceIdx = args.indexOf("--service");

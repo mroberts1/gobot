@@ -11,17 +11,18 @@ An always-on Telegram bot that:
 - Proactively checks in with smart context awareness
 - Sends morning briefings with your goals, calendar, and AI news
 - Persists memory (facts, goals, conversation history) via Supabase
-- Survives reboots via macOS launchd services
+- Survives reboots via launchd (macOS) or PM2 + scheduler (Windows/Linux)
 - Falls back to OpenRouter/Ollama when Claude is unavailable
 - Optional: voice replies, phone calls, audio transcription
 
 ## Prerequisites
 
 Before starting, ensure you have:
-- [ ] **macOS** (launchd services are macOS-only)
+- [ ] **macOS, Windows, or Linux**
 - [ ] **Bun** runtime installed (`curl -fsSL https://bun.sh/install | bash`)
 - [ ] **Claude Code** CLI installed and authenticated (`claude --version`)
 - [ ] A **Telegram** account
+- [ ] **Windows/Linux only**: PM2 for daemon services (`npm install -g pm2`)
 
 ---
 
@@ -138,8 +139,9 @@ Daily summary with goals, calendar, and optionally AI news.
 ## Phase 7: Always-On (Required after Phase 5, ~5 min)
 
 ### What Claude Code does:
-- Runs `bun run setup:launchd -- --service all` to generate and load all configured services
-- Verifies services are running with `launchctl list | grep com.go`
+- **macOS**: Runs `bun run setup:launchd -- --service all` to generate and load launchd services
+- **Windows/Linux**: Runs `bun run setup:services -- --service all` to configure PM2 + scheduler
+- Verifies services are running
 - Explains how to check logs and restart services
 
 ### Tell me:
@@ -199,7 +201,7 @@ src/
     env.ts               # Environment loader
     telegram.ts          # Telegram helpers
     claude.ts            # Claude Code subprocess
-    google-auth.ts       # Google OAuth (keychain + auto-refresh)
+    google-auth.ts       # Google OAuth (cross-platform: keychain/file)
     supabase.ts          # Database client
     memory.ts            # Facts, goals, intents
     fallback-llm.ts      # Backup LLM chain
@@ -221,10 +223,15 @@ config/
 db/
   schema.sql             # Supabase database schema
 setup/
+  install.ts             # Prerequisites checker + installer
+  configure-launchd.ts   # macOS launchd plist generator
+  configure-services.ts  # Windows/Linux PM2 + scheduler
+  verify.ts              # Full health check
   test-telegram.ts       # Telegram connectivity test
   test-supabase.ts       # Supabase connectivity test
+  uninstall.ts           # Clean removal (cross-platform)
 launchd/
-  templates/             # Plist templates for services
+  templates/             # Plist templates for services (macOS)
 logs/                    # Service log files
 docs/
   troubleshooting.md     # Common issues and fixes
@@ -242,18 +249,18 @@ bun run checkin
 # Run morning briefing manually
 bun run briefing
 
-# Check service status
-launchctl list | grep com.go
-
-# View logs
-tail -f logs/telegram-relay.log
-
-# Restart a service
-launchctl unload ~/Library/LaunchAgents/com.go.telegram-relay.plist
-launchctl load ~/Library/LaunchAgents/com.go.telegram-relay.plist
-
 # Full health check
 bun run setup:verify
+
+# --- macOS ---
+launchctl list | grep com.go                           # Check service status
+launchctl unload ~/Library/LaunchAgents/com.go.telegram-relay.plist  # Stop
+launchctl load ~/Library/LaunchAgents/com.go.telegram-relay.plist    # Start
+
+# --- Windows/Linux ---
+npx pm2 status                      # Check service status
+npx pm2 restart go-telegram-relay   # Restart a service
+npx pm2 logs                        # View logs
 ```
 
 ## Troubleshooting

@@ -64,7 +64,7 @@ The system runs as four independent processes, not a monolith:
 
 | Process | Type | Lifecycle |
 |---------|------|-----------|
-| `src/bot.ts` | Long-running daemon | Always on, KeepAlive |
+| `src/bot.ts` | Long-running daemon | Always on (launchd KeepAlive / PM2) |
 | `src/smart-checkin.ts` | Short-lived script | Runs at scheduled times, exits |
 | `src/morning-briefing.ts` | Short-lived script | Runs once daily, exits |
 | `src/watchdog.ts` | Short-lived script | Runs hourly, exits |
@@ -124,14 +124,15 @@ reasoning/decisions only.**
 
 ### How It Works
 
-Google OAuth tokens are stored in the **macOS Keychain** by the MCP servers
-when you first authenticate. The `src/lib/google-auth.ts` module reads these
-tokens directly:
+Google OAuth tokens are stored by the MCP servers when you first authenticate.
+On **macOS**, tokens go into the Keychain. On **Windows/Linux**, tokens are
+stored in `config/.google-tokens.json`. The `src/lib/google-auth.ts` module
+detects the platform and reads tokens from the right location:
 
 ```typescript
 import { getValidAccessToken, KEYCHAIN_CALENDAR } from "./lib/google-auth";
 
-// Instant -- reads token from keychain, auto-refreshes if expired
+// Instant -- reads token from keychain (macOS) or file (Win/Linux), auto-refreshes if expired
 const token = await getValidAccessToken(KEYCHAIN_CALENDAR);
 
 // Direct API call -- no subprocess, no MCP server
@@ -159,7 +160,7 @@ client secret. You never need to handle refresh manually.
 
 ### Key Files
 
-- `src/lib/google-auth.ts` -- OAuth token management (keychain + auto-refresh)
+- `src/lib/google-auth.ts` -- OAuth token management (cross-platform: keychain/file + auto-refresh)
 - `src/smart-checkin.ts` -- Uses direct APIs for data, Claude only for decisions
 - `src/morning-briefing.ts` -- Uses direct Calendar API for events
 
@@ -411,11 +412,13 @@ go-telegram-bot/
     schema.sql                  # Supabase database schema (150 lines)
 
   setup/
-    install.ts                  # Prerequisites checker + installer
-    configure-launchd.ts        # launchd plist generator
-    verify.ts                   # Full health check
+    install.ts                  # Prerequisites checker + installer (cross-platform)
+    configure-launchd.ts        # launchd plist generator (macOS)
+    configure-services.ts       # PM2 + scheduler setup (Windows/Linux)
+    verify.ts                   # Full health check (cross-platform)
+    uninstall.ts                # Clean removal (cross-platform)
 
-  launchd/
+  launchd/                        # macOS service templates
     com.go.telegram-relay.plist.template
     com.go.smart-checkin.plist.template
     com.go.morning-briefing.plist.template

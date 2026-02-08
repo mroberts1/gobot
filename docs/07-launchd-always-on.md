@@ -1,11 +1,29 @@
-# Module 7: launchd Always-On
+# Module 7: Always-On Services
 
-> This module explains how launchd keeps your bot running 24/7 on macOS,
-> survives reboots, and handles scheduled tasks reliably.
+> This module explains how to keep your bot running 24/7,
+> survive reboots, and handle scheduled tasks reliably -- on any platform.
 
 ---
 
-## Why launchd (Not cron, Not pm2)
+## Platform Overview
+
+| Platform | Daemon Tool | Scheduler | Setup |
+|----------|-------------|-----------|-------|
+| **macOS** | launchd | launchd (`StartCalendarInterval`) | `bun run setup:launchd -- --service all` |
+| **Windows** | PM2 | Task Scheduler | `bun run setup:services -- --service all` |
+| **Linux** | PM2 | cron | `bun run setup:services -- --service all` |
+
+On **macOS**, we use launchd because it's the native init system -- no extra
+dependencies, survives reboot, auto-restarts crashed processes, and catches
+up on missed schedules after sleep.
+
+On **Windows/Linux**, we use [PM2](https://pm2.keymetrics.io/) for always-running
+daemons (telegram-relay, watchdog) and the OS-native scheduler (Task Scheduler
+or cron) for periodic scripts (smart-checkin, morning-briefing).
+
+---
+
+## macOS: Why launchd
 
 | Option | Problem |
 |--------|---------|
@@ -295,15 +313,71 @@ This creates a monitoring hierarchy:
 
 ---
 
+## Windows/Linux: PM2 + Scheduler
+
+If you are not on macOS, the project uses PM2 for daemon services and your
+OS-native scheduler for periodic tasks.
+
+### Prerequisites
+
+```bash
+npm install -g pm2
+```
+
+### Service Configuration
+
+```bash
+bun run setup:services -- --service all
+```
+
+This script:
+1. Starts daemon services (telegram-relay, watchdog) with PM2
+2. Creates scheduled tasks for periodic services:
+   - **Windows**: `schtasks` entries for each check-in interval
+   - **Linux**: cron entries
+
+### PM2 Commands
+
+```bash
+npx pm2 status                      # Check all services
+npx pm2 logs go-telegram-relay      # View logs
+npx pm2 restart go-telegram-relay   # Restart a service
+npx pm2 stop go-telegram-relay      # Stop a service
+npx pm2 save                        # Save current state
+npx pm2 startup                     # Auto-start on boot
+```
+
+### Windows Task Scheduler
+
+```bash
+schtasks /Query /TN Go-*            # List Go tasks
+schtasks /Run /TN Go-morning-briefing  # Force-run a task
+```
+
+### Linux cron
+
+```bash
+crontab -l                          # View scheduled entries
+```
+
+### Uninstall
+
+```bash
+bun run uninstall                   # Removes PM2 processes and scheduled tasks
+```
+
+---
+
 ## Relevant Source Files
 
 | File | Purpose |
 |------|---------|
-| `setup/configure-launchd.ts` | Template processor and service installer |
-| `launchd/com.go.telegram-relay.plist.template` | Bot daemon template |
-| `launchd/com.go.smart-checkin.plist.template` | Check-in schedule template |
-| `launchd/com.go.morning-briefing.plist.template` | Briefing schedule template |
-| `launchd/com.go.watchdog.plist.template` | Watchdog schedule template |
+| `setup/configure-launchd.ts` | macOS launchd template processor |
+| `setup/configure-services.ts` | Windows/Linux PM2 + scheduler setup |
+| `launchd/com.go.telegram-relay.plist.template` | Bot daemon template (macOS) |
+| `launchd/com.go.smart-checkin.plist.template` | Check-in schedule template (macOS) |
+| `launchd/com.go.morning-briefing.plist.template` | Briefing schedule template (macOS) |
+| `launchd/com.go.watchdog.plist.template` | Watchdog schedule template (macOS) |
 | `src/watchdog.ts` | Health monitor for scheduled services |
 | `config/schedule.example.json` | Schedule configuration |
 

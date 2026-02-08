@@ -8,7 +8,9 @@
 import { spawn } from "bun";
 import { optionalEnv } from "./env";
 
+const IS_WINDOWS = process.platform === "win32";
 const CLAUDE_PATH = process.env.CLAUDE_PATH || "claude";
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || "";
 
 export interface ClaudeOptions {
   prompt: string;
@@ -96,7 +98,7 @@ export async function callClaude(options: ClaudeOptions): Promise<ClaudeResult> 
     cwd: cwd || process.cwd(),
     env: {
       ...process.env,
-      HOME: process.env.HOME || "",
+      HOME: HOME_DIR,
       PATH: process.env.PATH || "",
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
     },
@@ -173,7 +175,7 @@ export async function runClaudeWithTimeout(
     cwd: options?.cwd || process.cwd(),
     env: {
       ...process.env,
-      HOME: process.env.HOME || "",
+      HOME: HOME_DIR,
       PATH: process.env.PATH || "",
     },
     stdout: "pipe",

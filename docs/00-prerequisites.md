@@ -5,21 +5,30 @@
 
 ---
 
-## Why macOS?
+## Supported Platforms
 
-This project uses **macOS launchd** to keep the bot running 24/7. launchd is the
-native macOS service manager -- it starts your bot at login, restarts it if it
-crashes, and runs scheduled tasks (check-ins, morning briefings) reliably.
+This project is **cross-platform** and supports macOS, Windows, and Linux.
 
-There is no equivalent single command on Linux (`systemd` is close but different)
-or Windows. The plist templates in `launchd/` and the setup script at
-`setup/configure-launchd.ts` are macOS-specific.
+Each platform uses a different approach for keeping services running 24/7:
 
-**If you are on Linux**, you could adapt the project to use systemd unit files
-instead of plist files, but that is not covered by the setup scripts.
+| Platform | Daemon (always-on) | Periodic (scheduled) | Setup Command |
+|----------|-------------------|---------------------|---------------|
+| **macOS** | launchd (`KeepAlive`) | launchd (`StartCalendarInterval`) | `bun run setup:launchd -- --service all` |
+| **Windows** | PM2 | Task Scheduler (`schtasks`) | `bun run setup:services -- --service all` |
+| **Linux** | PM2 | cron | `bun run setup:services -- --service all` |
 
-**Minimum macOS version:** Any version that supports launchd (macOS 10.4+).
-In practice, you want macOS 12+ for good Bun compatibility.
+**macOS** uses the native `launchd` service manager. It starts your bot at login,
+restarts it if it crashes, and runs scheduled tasks reliably (even catching up
+after sleep).
+
+**Windows/Linux** uses [PM2](https://pm2.keymetrics.io/) for always-on daemon
+processes and the OS-native scheduler (Task Scheduler on Windows, cron on Linux)
+for periodic scripts.
+
+**Minimum versions:**
+- macOS 12+ (for good Bun compatibility)
+- Windows 10+ (for Bun and Task Scheduler support)
+- Linux: Any modern distro with cron support
 
 ---
 
@@ -201,7 +210,7 @@ bun run setup
 ```
 
 This runs `setup/install.ts` which:
-1. Checks your platform is macOS
+1. Checks your platform is supported (macOS, Windows, or Linux)
 2. Verifies Bun is installed
 3. Checks for Claude CLI
 4. Installs npm dependencies
