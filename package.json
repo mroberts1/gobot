@@ -1,7 +1,7 @@
 {
-  "name": "go-telegram-bot",
+  "name": "gobot",
   "version": "2.0.0",
-  "description": "Always-on AI Telegram bot powered by Claude Code with multi-agent routing, proactive check-ins, and persistent memory",
+  "description": "Always-on AI Telegram agent powered by Claude with multi-agent routing, proactive check-ins, and persistent memory",
   "type": "module",
   "scripts": {
     "start": "bun run src/bot.ts",

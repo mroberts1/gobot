@@ -1,11 +1,11 @@
-# Go - Always-On AI Telegram Bot
+# Gobot — Always-On AI Telegram Agent
 
 > Claude Code reads this file automatically. Follow the setup phases below.
 > Each phase is designed to be completed through conversation with Claude Code.
 
 ## What This Sets Up
 
-An always-on Telegram bot that:
+An always-on Telegram agent that:
 - Relays your messages to Claude and sends back responses
 - **Two processing engines**: Claude Code CLI (local, free with subscription) or Anthropic API (VPS, pay-per-token)
 - **Hybrid mode**: VPS always on, forwards to local when your machine is awake

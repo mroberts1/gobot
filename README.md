@@ -1,6 +1,6 @@
-# Go — Always-On AI Telegram Bot
+# Gobot — Always-On AI Telegram Agent
 
-An always-on Telegram bot powered by Claude with multi-agent routing, proactive check-ins, persistent memory, voice calls, and morning briefings. Supports three deployment modes: local desktop, cloud VPS, or hybrid (recommended).
+An always-on Telegram agent powered by Claude with multi-agent routing, proactive check-ins, persistent memory, voice calls, and morning briefings. Supports three deployment modes: local desktop, cloud VPS, or hybrid (recommended).
 
 **Created by [Goda Go](https://youtube.com/@GodaGo)** | [AI Productivity Hub Community](https://skool.com/ai-productivity-hub)
 
@@ -58,8 +58,8 @@ Your laptop sleeps. Your VPS doesn't. With hybrid mode:
 
 ```bash
 # Clone the repo
-git clone https://github.com/GodaGo/go-telegram-bot.git
-cd go-telegram-bot
+git clone https://github.com/GodaGo/gobot.git
+cd gobot
 
 # Install dependencies
 bun install
@@ -100,7 +100,7 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
 ### Local Mode
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Telegram    │────▶│  Go Bot      │────▶│  Claude Code    │
+│  Telegram    │────▶│  Gobot       │────▶│  Claude Code    │
 │  (grammY)   │◀────│  (polling)   │◀────│  CLI Subprocess │
 └─────────────┘     └──────┬───────┘     └─────────────────┘
                            │
