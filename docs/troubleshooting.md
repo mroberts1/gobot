@@ -459,6 +459,77 @@ bun run setup:launchd -- --service all
 
 ---
 
+## VPS-Specific Issues
+
+If you deployed to a VPS (see [Module 11](./11-vps-deployment.md)), these
+additional issues may apply.
+
+### Claude Subprocesses Fail on VPS
+
+**Symptoms:** Bot returns fallback responses or errors for every message.
+
+**Fix:** Claude Code on a headless VPS cannot use OAuth. You must set
+`ANTHROPIC_API_KEY` in `.env`:
+
+```bash
+grep ANTHROPIC_API_KEY .env
+# Should show your API key, not a placeholder
+```
+
+Test Claude directly:
+
+```bash
+claude -p "Hello" --output-format text
+```
+
+### PM2 Services Not Starting After Reboot
+
+**Fix:** Ensure PM2 startup was configured:
+
+```bash
+pm2 startup
+# Follow the printed command
+pm2 save
+```
+
+### Cron Jobs Silent Failures
+
+**Fix:** Check cron logs:
+
+```bash
+grep CRON /var/log/syslog | tail -20
+```
+
+Common issue: `bun` not in cron's PATH. The `setup:services` script uses
+`cd /path/to/project && bun run script.ts` to handle this.
+
+### VPS Debugging Cheatsheet
+
+```bash
+# ---- PM2 Service Status ----
+pm2 status                                # All services
+pm2 logs go-telegram-relay --lines 50     # Bot logs
+pm2 logs go-telegram-relay --err          # Error logs only
+
+# ---- Cron Schedule ----
+crontab -l                                # View all cron entries
+grep CRON /var/log/syslog | tail -20      # Cron execution log
+
+# ---- System Resources ----
+htop                                      # Interactive process viewer
+free -h                                   # Memory usage
+df -h                                     # Disk usage
+
+# ---- Network ----
+curl -I https://api.telegram.org          # Test Telegram API access
+curl -I https://api.anthropic.com         # Test Anthropic API access
+
+# ---- Restart Everything ----
+pm2 restart all                           # Restart all PM2 services
+```
+
+---
+
 ## How to Report Issues
 
 When reporting a problem, include:

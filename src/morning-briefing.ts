@@ -250,6 +250,11 @@ async function buildAndSendBriefing(): Promise<void> {
 // ============================================================
 
 async function main() {
+  // Stagger startup to avoid thundering herd after sleep/wake
+  const startupDelay = Math.floor(Math.random() * 30000);
+  console.log(`⏳ Staggering startup by ${Math.round(startupDelay / 1000)}s...`);
+  await new Promise(r => setTimeout(r, startupDelay));
+
   console.log("🌅 Go Morning Briefing starting...");
   console.log(`📱 Chat: ${CHAT_ID}`);
   console.log(`🔑 Grok API: ${XAI_API_KEY ? "configured" : "not set"}`);

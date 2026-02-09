@@ -392,6 +392,7 @@ go-telegram-bot/
       voice.ts                  # ElevenLabs TTS + calls (214 lines)
       transcribe.ts             # Gemini transcription (78 lines)
       fallback-llm.ts           # OpenRouter + Ollama chain (89 lines)
+      google-auth.ts            # Google OAuth (cross-platform: keychain/file)
 
     agents/
       base.ts                   # AgentConfig interface, topic map, cross-agent (156 lines)

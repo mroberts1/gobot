@@ -417,4 +417,4 @@ sending the message.
 
 ---
 
-**Next module:** [Architecture Overview](./architecture.md)
+**Next module:** [11 - VPS Deployment](./11-vps-deployment.md)

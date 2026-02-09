@@ -177,7 +177,24 @@ Daily summary with goals, calendar, and optionally AI news.
 
 ---
 
-## Phase 9: Verification (Required, ~2 min)
+## Phase 9: VPS Deployment (Optional, ~30 min)
+
+### What This Does
+Deploy the bot to a cloud VPS so it runs 24/7 without depending on your local machine.
+
+### What Claude Code does:
+- Walks you through provisioning a VPS (Hostinger recommended, any provider works)
+- Guides server security hardening (SSH keys, UFW, fail2ban)
+- Installs Bun, Node.js, PM2, and Claude Code CLI
+- Deploys the bot with PM2 + cron (Linux equivalent of launchd)
+- Sets up Google OAuth token migration (Keychain → file)
+
+### Tell me:
+"Deploy to VPS" and I'll walk you through it. See `docs/11-vps-deployment.md` for the full guide.
+
+---
+
+## Phase 10: Verification (Required, ~2 min)
 
 ### What Claude Code does:
 - Runs `bun run setup:verify` for full health check

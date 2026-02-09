@@ -47,6 +47,12 @@ import {
   formatCrossAgentContext,
   getUserProfile,
 } from "./agents";
+import {
+  getValidAccessToken,
+  isGoogleAuthAvailable,
+  KEYCHAIN_GMAIL,
+  KEYCHAIN_CALENDAR,
+} from "./lib/google-auth";
 
 // ---------------------------------------------------------------------------
 // 1. Load Environment
@@ -646,8 +652,27 @@ async function handleDocumentMessage(ctx: Context): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// 8. callClaude() - Core AI Processing
+// 8. Google Auth Warmup + callClaude() - Core AI Processing
 // ---------------------------------------------------------------------------
+
+/**
+ * Pre-refresh Google OAuth tokens before spawning Claude subprocess.
+ * Prevents MCP servers from triggering interactive browser auth on stale tokens.
+ */
+async function warmupGoogleAuth(): Promise<void> {
+  try {
+    const checks = [];
+    if (await isGoogleAuthAvailable(KEYCHAIN_GMAIL)) {
+      checks.push(getValidAccessToken(KEYCHAIN_GMAIL));
+    }
+    if (await isGoogleAuthAvailable(KEYCHAIN_CALENDAR)) {
+      checks.push(getValidAccessToken(KEYCHAIN_CALENDAR));
+    }
+    if (checks.length > 0) await Promise.all(checks);
+  } catch (err) {
+    console.warn("Google token pre-refresh failed (non-fatal):", err);
+  }
+}
 
 /**
  * Call Claude Code subprocess with agent config, memory, and conversation context.
@@ -659,6 +684,9 @@ async function callClaude(
   agentName: string = "general",
   topicId?: number
 ): Promise<string> {
+  // Pre-refresh Google OAuth tokens so MCP servers don't trigger browser auth
+  await warmupGoogleAuth();
+
   const agentConfig = getAgentConfig(agentName);
   const userProfile = await getUserProfile();
 

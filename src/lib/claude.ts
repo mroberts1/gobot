@@ -8,6 +8,7 @@
 import { spawn } from "bun";
 import { optionalEnv } from "./env";
 
+const IS_MACOS = process.platform === "darwin";
 const IS_WINDOWS = process.platform === "win32";
 const CLAUDE_PATH = process.env.CLAUDE_PATH || "claude";
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || "";
@@ -93,8 +94,13 @@ export async function callClaude(options: ClaudeOptions): Promise<ClaudeResult> 
     args.push("--max-turns", maxTurns);
   }
 
+  // On macOS, wrap with caffeinate -i to prevent idle sleep during active tasks
+  const cmd = IS_MACOS
+    ? ["/usr/bin/caffeinate", "-i", CLAUDE_PATH, ...args]
+    : [CLAUDE_PATH, ...args];
+
   const proc = spawn({
-    cmd: [CLAUDE_PATH, ...args],
+    cmd,
     cwd: cwd || process.cwd(),
     env: {
       ...process.env,
@@ -161,17 +167,22 @@ export async function runClaudeWithTimeout(
     cwd?: string;
   }
 ): Promise<string> {
+  const baseCmd = [
+    CLAUDE_PATH,
+    "-p",
+    prompt,
+    "--output-format",
+    "text",
+    ...(options?.allowedTools
+      ? ["--allowedTools", options.allowedTools.join(",")]
+      : []),
+  ];
+  const cmd = IS_MACOS
+    ? ["/usr/bin/caffeinate", "-i", ...baseCmd]
+    : baseCmd;
+
   const proc = spawn({
-    cmd: [
-      CLAUDE_PATH,
-      "-p",
-      prompt,
-      "--output-format",
-      "text",
-      ...(options?.allowedTools
-        ? ["--allowedTools", options.allowedTools.join(",")]
-        : []),
-    ],
+    cmd,
     cwd: options?.cwd || process.cwd(),
     env: {
       ...process.env,

@@ -111,6 +111,7 @@ This repo doubles as a learning resource. Each module covers one architectural l
 | 08 | [Optional Integrations](docs/08-optional-integrations.md) | Voice, fallback, extensibility |
 | 09 | [Hooks & Security](docs/09-hooks-security.md) | Message redaction, validation |
 | 10 | [Customization Guide](docs/10-customization-guide.md) | Add agents, integrations |
+| 11 | [VPS Deployment](docs/11-vps-deployment.md) | Deploy to a cloud VPS (Hostinger) |
 
 Also:
 - [Architecture Deep Dive](docs/architecture.md)
