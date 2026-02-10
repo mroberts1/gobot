@@ -155,6 +155,7 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
 Step-by-step video walkthroughs for every module are available in the [AI Productivity Hub](https://skool.com/ai-productivity-hub) community on Skool.
 
 Also in this repo:
+- [FAQ](docs/faq.md)
 - [Architecture Deep Dive](docs/architecture.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
