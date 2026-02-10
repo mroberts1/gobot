@@ -243,7 +243,6 @@ function checkOptionalIntegrations() {
   const optional: [string, string][] = [
     ["ELEVENLABS_API_KEY", "ElevenLabs (voice)"],
     ["GEMINI_API_KEY", "Gemini (transcription)"],
-    ["XAI_API_KEY", "Grok/xAI (AI news)"],
     ["OPENROUTER_API_KEY", "OpenRouter (fallback LLM)"],
   ];
 

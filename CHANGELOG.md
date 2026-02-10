@@ -37,7 +37,7 @@
 - Forum topic routing for multi-agent system
 - Persistent memory via Supabase (facts, goals, conversation history)
 - Smart check-ins with context-aware decision making
-- Morning briefings with goals, calendar, AI news
+- Morning briefings with goals and MCP server context
 - Always-on services via launchd (macOS) / PM2 (Windows/Linux)
 - Fallback LLM chain: Claude → OpenRouter → Ollama
 - Voice replies (ElevenLabs TTS)

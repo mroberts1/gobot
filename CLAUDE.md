@@ -13,7 +13,7 @@ An always-on Telegram agent that:
 - **Extensible via MCP**: Connect any MCP servers you use (email, calendar, project management, etc.)
 - **Human-in-the-loop**: Claude asks for confirmation via inline buttons before taking actions
 - Proactively checks in with smart context awareness
-- Sends morning briefings with your goals, calendar, and AI news
+- Sends morning briefings with your goals and whatever context your MCP servers provide
 - Persists memory (facts, goals, conversation history) via Supabase
 - Survives reboots via launchd (macOS) or PM2 + scheduler (Windows/Linux)
 - Falls back to OpenRouter/Ollama when Claude is unavailable
@@ -146,7 +146,7 @@ The bot includes 6 pre-configured agents. You can customize them or use defaults
 Proactive messages based on your goals, schedule, and conversation history.
 
 ### Morning Briefing
-Daily summary with goals, calendar, and optionally AI news.
+Daily summary with goals and context from your configured MCP servers.
 
 ### What Claude Code does:
 - Asks your preferred check-in schedule (or uses defaults from `config/schedule.example.json`)
