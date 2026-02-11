@@ -42,6 +42,98 @@ Claude Code will ask for permission before running commands or editing files. Wh
 
 ---
 
+## Phase 0: Environment Scan (Automatic, ~1 min)
+
+> **Claude Code: Run this BEFORE starting Phase 1. Always. Even if the user says they're starting fresh.**
+
+### What Claude Code does:
+
+**Step 1 — Ask the user:**
+
+"Have you previously set up a Telegram bot with Claude Code, or any similar AI assistant project? For example, the free mini-course relay, or your own custom setup?"
+
+**Step 2 — Scan regardless of answer:**
+
+Even if the user says "no," run these checks silently. They may have forgotten, or someone else set it up on their machine.
+
+1. **Check for existing `.env` file** in this project directory. If it exists, read it and catalog every variable that has a real value (not a placeholder like `your_bot_token_here`).
+
+2. **Check for other bot projects** on the machine:
+   - Look for `~/.claude-relay/` directory (free mini-course relay)
+   - Look for `~/claude-telegram-relay/` or any folder matching `*telegram*relay*` in `~/`, `~/Desktop/`, `~/Downloads/`, `~/Documents/`, `~/development/`
+   - If found, read their `.env` files for reusable credentials
+
+3. **Check for running services:**
+   - macOS: `launchctl list | grep -E "com\.go\.|claude.*relay|telegram"`
+   - Linux/Windows: `pm2 list` (if pm2 exists)
+   - Report any existing bot services that might conflict
+
+4. **Check for existing Supabase MCP:**
+   - Look for `supabase` in Claude Code's MCP configuration
+   - If connected, test the connection
+
+5. **Check for existing Supabase tables** (if credentials found):
+   - Run `bun run setup/test-supabase.ts` to verify connectivity
+   - Query for existing tables: `messages`, `memory`, `logs`, `async_tasks`, `node_heartbeat`, `call_transcripts`
+   - Check if data exists in `messages` table (indicates active prior usage)
+
+6. **Check for existing profile:**
+   - Look for `config/profile.md` in this project
+   - Look for `~/.claude-relay/profile.md` or similar in discovered projects
+
+**Step 3 — Report findings:**
+
+Present a clear summary to the user:
+
+```
+ENVIRONMENT SCAN RESULTS
+
+Existing setup found: Yes/No
+Source: [this project / claude-telegram-relay at ~/path / other]
+
+✅ Telegram Bot Token — found, valid
+✅ Telegram User ID — found
+✅ Supabase URL — found
+✅ Supabase Anon Key — found
+❌ Supabase Service Role Key — missing (needed for GoBot)
+✅ User Name — "Sarah"
+✅ User Timezone — "Europe/Berlin"
+✅ Profile — found at [path]
+❌ Anthropic API Key — not set (needed for VPS mode)
+❌ Voice/ElevenLabs — not configured
+❌ Fallback LLMs — not configured
+
+Supabase tables:
+✅ messages (1,247 rows — your history is preserved)
+✅ memory (23 rows)
+✅ logs (456 rows)
+❌ async_tasks — missing (new in GoBot)
+❌ node_heartbeat — missing (new in GoBot)
+
+Running services:
+⚠️ claude-relay daemon running (will conflict — needs stopping)
+
+RECOMMENDATION:
+I can carry over your Telegram, Supabase, and profile settings.
+I'll add the missing tables without touching your existing data.
+Phases 1-3 can be skipped. Starting at Phase 4 (Agents).
+Stop the old relay service first? [Yes/No]
+```
+
+**Step 4 — Act on findings:**
+
+- **Reusable credentials found:** Copy them into this project's `.env`. Confirm with the user before overwriting anything. Never delete the source.
+- **Existing Supabase with data:** Run `db/schema.sql` which uses `IF NOT EXISTS` — safe for existing tables. Only new tables get created.
+- **Conflicting services found:** Ask the user before stopping them. Explain that two bots polling the same Telegram token will cause message conflicts.
+- **Profile found:** Offer to copy it to `config/profile.md`. Let user review it first.
+- **Nothing found:** Proceed normally from Phase 1. No special handling needed.
+
+**Step 5 — Skip completed phases:**
+
+Based on the scan, tell the user which phases are already done and which remain. Jump directly to the first incomplete phase.
+
+---
+
 ## Phase 1: Telegram Bot (Required, ~5 min)
 
 ### What you need to do:
@@ -95,28 +187,16 @@ Enable AI-powered memory search. Without this, the bot still works — it just u
 
 ### What you need:
 1. An OpenAI API key from [platform.openai.com](https://platform.openai.com)
-2. Supabase CLI installed (`npm install -g supabase`)
+2. Supabase MCP already connected (from Phase 2)
 
 ### What Claude Code does:
-- Saves your OpenAI key as a Supabase secret
+- Stores your OpenAI key as a Supabase secret
 - Deploys two edge functions (store-telegram-message, search-memory)
 - Runs the match_messages SQL function in your database
 - Verifies semantic search works
 
-### Setup steps:
-1. Add your OpenAI key to Supabase secrets:
-   ```bash
-   supabase secrets set OPENAI_API_KEY=sk-your-key-here
-   ```
-2. Deploy the edge functions:
-   ```bash
-   supabase functions deploy store-telegram-message
-   supabase functions deploy search-memory
-   ```
-3. Run the `match_messages` function in SQL Editor (at the bottom of `db/schema.sql`)
-
 ### Tell me:
-"Set up semantic search" with your OpenAI API key, or "Skip" to use basic text search.
+"Set up semantic search. My OpenAI key is [your key]" or "Skip" to use basic text search.
 
 ---
 
