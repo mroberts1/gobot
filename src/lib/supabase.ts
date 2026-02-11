@@ -419,6 +419,64 @@ export async function completeGoal(searchText: string): Promise<boolean> {
 }
 
 /**
+ * Delete a fact by partial text match.
+ * Returns true if at least one fact was deleted.
+ */
+export async function deleteFact(searchText: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    const { data: facts } = await sb
+      .from("memory")
+      .select("id, content")
+      .eq("type", "fact")
+      .ilike("content", `%${searchText}%`);
+
+    if (!facts || facts.length === 0) return false;
+
+    const { error } = await sb
+      .from("memory")
+      .delete()
+      .eq("id", facts[0].id);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cancel (delete) a goal by partial text match.
+ * Unlike completeGoal, this removes the goal entirely rather than marking it done.
+ * Returns true if at least one goal was deleted.
+ */
+export async function cancelGoal(searchText: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    const { data: goals } = await sb
+      .from("memory")
+      .select("id, content")
+      .eq("type", "goal")
+      .eq("completed", false)
+      .ilike("content", `%${searchText}%`);
+
+    if (!goals || goals.length === 0) return false;
+
+    const { error } = await sb
+      .from("memory")
+      .delete()
+      .eq("id", goals[0].id);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get all active (incomplete) goals.
  */
 export async function getActiveGoals(): Promise<MemoryItem[]> {

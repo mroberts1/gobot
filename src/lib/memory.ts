@@ -12,6 +12,8 @@ import {
   addFact as sbAddFact,
   addGoal as sbAddGoal,
   completeGoal as sbCompleteGoal,
+  deleteFact as sbDeleteFact,
+  cancelGoal as sbCancelGoal,
   getActiveGoals as sbGetActiveGoals,
   getFacts as sbGetFacts,
   getMemoryContext as sbGetMemoryContext,
@@ -150,6 +152,51 @@ export async function completeGoal(searchText: string): Promise<boolean> {
 }
 
 /**
+ * Delete a fact by partial text match.
+ * Uses Supabase if available, otherwise local file.
+ */
+export async function deleteFact(searchText: string): Promise<boolean> {
+  if (isSupabaseEnabled()) {
+    return sbDeleteFact(searchText);
+  }
+
+  const memory = await readLocalMemory();
+  const lower = searchText.toLowerCase();
+  const index = memory.facts.findIndex((f) =>
+    f.toLowerCase().includes(lower)
+  );
+
+  if (index === -1) return false;
+
+  memory.facts.splice(index, 1);
+  await writeLocalMemory(memory);
+  return true;
+}
+
+/**
+ * Cancel (delete) a goal by partial text match.
+ * Unlike completeGoal, this removes the goal entirely.
+ * Uses Supabase if available, otherwise local file.
+ */
+export async function cancelGoal(searchText: string): Promise<boolean> {
+  if (isSupabaseEnabled()) {
+    return sbCancelGoal(searchText);
+  }
+
+  const memory = await readLocalMemory();
+  const lower = searchText.toLowerCase();
+  const index = memory.goals.findIndex((g) =>
+    g.text.toLowerCase().includes(lower)
+  );
+
+  if (index === -1) return false;
+
+  memory.goals.splice(index, 1);
+  await writeLocalMemory(memory);
+  return true;
+}
+
+/**
  * List all active goals. Returns formatted string.
  */
 export async function listGoals(): Promise<string> {
@@ -224,7 +271,9 @@ export async function getMemoryContext(): Promise<string> {
 interface ProcessedIntents {
   goalsAdded: string[];
   goalsCompleted: string[];
+  goalsCancelled: string[];
   factsAdded: string[];
+  factsRemoved: string[];
 }
 
 /**
@@ -234,7 +283,9 @@ interface ProcessedIntents {
  *   [GOAL: description | DEADLINE: deadline]   - Add a new goal
  *   [GOAL: description]                        - Add a goal without deadline
  *   [DONE: partial match text]                 - Complete an existing goal
+ *   [CANCEL: partial match text]               - Cancel/delete a goal
  *   [REMEMBER: fact text]                      - Store a fact
+ *   [FORGET: partial match text]               - Delete a stored fact
  *
  * Returns a summary of what was processed.
  */
@@ -244,7 +295,9 @@ export async function processIntents(
   const result: ProcessedIntents = {
     goalsAdded: [],
     goalsCompleted: [],
+    goalsCancelled: [],
     factsAdded: [],
+    factsRemoved: [],
   };
 
   // [GOAL: description | DEADLINE: deadline]
@@ -283,6 +336,22 @@ export async function processIntents(
     const factText = match[1].trim();
     const success = await addFact(factText);
     if (success) result.factsAdded.push(factText);
+  }
+
+  // [FORGET: text]
+  const forgetPattern = /\[FORGET:\s*([^\]]+?)\s*\]/gi;
+  while ((match = forgetPattern.exec(text)) !== null) {
+    const forgetText = match[1].trim();
+    const success = await deleteFact(forgetText);
+    if (success) result.factsRemoved.push(forgetText);
+  }
+
+  // [CANCEL: text]
+  const cancelPattern = /\[CANCEL:\s*([^\]]+?)\s*\]/gi;
+  while ((match = cancelPattern.exec(text)) !== null) {
+    const cancelText = match[1].trim();
+    const success = await cancelGoal(cancelText);
+    if (success) result.goalsCancelled.push(cancelText);
   }
 
   return result;

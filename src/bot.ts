@@ -26,6 +26,8 @@ import {
   addFact,
   addGoal,
   completeGoal,
+  deleteFact,
+  cancelGoal,
   listGoals,
   listFacts,
 } from "./lib/memory";
@@ -315,6 +317,32 @@ async function handleTextMessage(ctx: Context): Promise<void> {
       const success = await completeGoal(search);
       const reply = success
         ? `Goal completed! Nice work.`
+        : `Couldn't find an active goal matching "${search}".`;
+      await ctx.reply(reply);
+      return;
+    }
+  }
+
+  // forget: <partial fact match>
+  if (lowerText.startsWith("forget:")) {
+    const search = text.slice("forget:".length).trim();
+    if (search) {
+      const success = await deleteFact(search);
+      const reply = success
+        ? `Done. I've forgotten that.`
+        : `Couldn't find a stored fact matching "${search}".`;
+      await ctx.reply(reply);
+      return;
+    }
+  }
+
+  // cancel: <partial goal match>
+  if (lowerText.startsWith("cancel:")) {
+    const search = text.slice("cancel:".length).trim();
+    if (search) {
+      const success = await cancelGoal(search);
+      const reply = success
+        ? `Goal cancelled and removed.`
         : `Couldn't find an active goal matching "${search}".`;
       await ctx.reply(reply);
       return;
@@ -903,7 +931,9 @@ async function callClaude(
   sections.push(`## INTENT DETECTION
 If the user sets a goal, include: [GOAL: description | DEADLINE: deadline]
 If a goal is completed, include: [DONE: partial match]
+If the user wants to cancel/abandon a goal, include: [CANCEL: partial match]
 If you learn a fact worth remembering, include: [REMEMBER: fact]
+If the user wants to forget a stored fact, include: [FORGET: partial match]
 These tags will be parsed automatically. Include them naturally in your response.`);
 
   // The actual user message

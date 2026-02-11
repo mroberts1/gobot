@@ -279,7 +279,9 @@ IMPORTANT BEHAVIORS:
 INTENT DETECTION - Include at END of response when relevant:
 - [GOAL: goal text | DEADLINE: optional] — for goals/tasks
 - [DONE: what completed] — for completions
-- [REMEMBER: fact] — for important facts to remember`;
+- [CANCEL: partial match] — for cancelling/abandoning a goal
+- [REMEMBER: fact] — for important facts to remember
+- [FORGET: partial match] — for removing a stored fact`;
 }
 
 // ============================================================
