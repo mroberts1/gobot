@@ -14,6 +14,9 @@
 -- separate Supabase project for the bot instead.
 -- ============================================================
 
+-- Enable pgvector extension (required for embedding column and semantic search)
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Messages table (conversation history)
 CREATE TABLE IF NOT EXISTS messages (
   id BIGSERIAL PRIMARY KEY,
