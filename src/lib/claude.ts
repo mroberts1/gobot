@@ -2,7 +2,7 @@
  * Go - Claude Code Subprocess Spawner
  *
  * Spawns claude CLI as a subprocess for AI processing.
- * Handles session resumption, timeouts, and cleanup.
+ * Handles session resumption, timeouts, cleanup, and streaming progress.
  */
 
 import { spawn } from "bun";
@@ -21,6 +21,13 @@ export interface ClaudeOptions {
   timeoutMs?: number;
   cwd?: string;
   maxTurns?: string;
+}
+
+export interface ClaudeStreamOptions extends ClaudeOptions {
+  /** Called when a tool starts executing. Throttled to max 1 call per 5s. */
+  onToolStart?: (toolName: string) => void;
+  /** Called when the first meaningful text chunk arrives (plan/thinking). */
+  onFirstText?: (snippet: string) => void;
 }
 
 export interface ClaudeResult {
@@ -210,5 +217,193 @@ export async function runClaudeWithTimeout(
   } catch (error) {
     clearTimeout(timer);
     throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Friendly tool name mapping for progress updates
+// ---------------------------------------------------------------------------
+
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  Read: "Reading file",
+  Write: "Writing file",
+  Edit: "Editing file",
+  Glob: "Searching files",
+  Grep: "Searching code",
+  Bash: "Running command",
+  WebSearch: "Searching the web",
+  WebFetch: "Fetching page",
+  Task: "Delegating task",
+  AskUserQuestion: "Asking a question",
+};
+
+function friendlyToolName(toolName: string): string {
+  // Direct match
+  if (TOOL_DISPLAY_NAMES[toolName]) return TOOL_DISPLAY_NAMES[toolName];
+  // MCP tool: mcp__server__action → "Using server"
+  if (toolName.startsWith("mcp__")) {
+    const parts = toolName.split("__");
+    const server = parts[1] || "tool";
+    return `Using ${server.replace(/-/g, " ")}`;
+  }
+  return `Using ${toolName}`;
+}
+
+/**
+ * Spawn Claude Code subprocess with streaming JSONL output.
+ * Parses events in real time and fires callbacks for progress updates.
+ * Returns the same ClaudeResult as callClaude() but with live progress.
+ */
+export async function callClaudeStreaming(options: ClaudeStreamOptions): Promise<ClaudeResult> {
+  const {
+    prompt,
+    allowedTools,
+    resumeSessionId,
+    timeoutMs = 300_000,
+    cwd,
+    maxTurns,
+    onToolStart,
+    onFirstText,
+  } = options;
+
+  const args = ["-p", prompt, "--output-format", "stream-json", "--dangerously-skip-permissions"];
+
+  if (allowedTools && allowedTools.length > 0) {
+    args.push("--allowedTools", allowedTools.join(","));
+  }
+
+  if (resumeSessionId) {
+    args.push("--resume", resumeSessionId);
+  }
+
+  if (maxTurns) {
+    args.push("--max-turns", maxTurns);
+  }
+
+  const cmd = IS_MACOS
+    ? ["/usr/bin/caffeinate", "-i", CLAUDE_PATH, ...args]
+    : [CLAUDE_PATH, ...args];
+
+  const proc = spawn({
+    cmd,
+    cwd: cwd || process.cwd(),
+    env: {
+      ...process.env,
+      HOME: HOME_DIR,
+      PATH: process.env.PATH || "",
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  // Timeout with proper process kill
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    try { proc.kill(); } catch {}
+  }, timeoutMs);
+
+  // Throttle tool progress (max 1 per 5s)
+  let lastToolProgressAt = 0;
+  const TOOL_THROTTLE_MS = 5_000;
+
+  let sessionId: string | undefined;
+  let resultText = "";
+  let firstTextSent = false;
+  let textAccumulator = "";
+
+  try {
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for await (const chunk of proc.stdout) {
+      if (timedOut) break;
+
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        let event: any;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue; // skip malformed lines
+        }
+
+        // Capture session_id from any event that has it
+        if (event.session_id && !sessionId) {
+          sessionId = event.session_id;
+        }
+
+        // Final result event
+        if (event.type === "result") {
+          resultText = event.result || "";
+          sessionId = event.session_id || sessionId;
+          continue;
+        }
+
+        // Only process stream_event type
+        if (event.type !== "stream_event") continue;
+
+        const apiEvent = event.event;
+        if (!apiEvent) continue;
+
+        // Tool use start → progress callback
+        if (
+          apiEvent.type === "content_block_start" &&
+          apiEvent.content_block?.type === "tool_use" &&
+          onToolStart
+        ) {
+          const now = Date.now();
+          if (now - lastToolProgressAt >= TOOL_THROTTLE_MS) {
+            lastToolProgressAt = now;
+            const name = apiEvent.content_block.name || "tool";
+            onToolStart(friendlyToolName(name));
+          }
+        }
+
+        // Text delta → accumulate for first-text callback
+        if (
+          apiEvent.type === "content_block_delta" &&
+          apiEvent.delta?.type === "text_delta" &&
+          apiEvent.delta.text
+        ) {
+          textAccumulator += apiEvent.delta.text;
+
+          // Send first meaningful text snippet (>30 chars, first sentence)
+          if (!firstTextSent && onFirstText && textAccumulator.length > 30) {
+            firstTextSent = true;
+            // Extract first sentence or first 150 chars
+            const match = textAccumulator.match(/^.{30,150}?[.!?\n]/);
+            const snippet = match ? match[0].trim() : textAccumulator.substring(0, 150).trim();
+            onFirstText(snippet);
+          }
+        }
+      }
+    }
+
+    clearTimeout(timeoutId);
+
+    if (timedOut) {
+      return { text: "", isError: true };
+    }
+
+    // If no result event (shouldn't happen), use accumulated text
+    if (!resultText && textAccumulator) {
+      resultText = textAccumulator;
+    }
+
+    if (isClaudeErrorResponse(resultText)) {
+      return { text: resultText, sessionId, isError: true };
+    }
+
+    return { text: resultText, sessionId, isError: false };
+  } catch {
+    clearTimeout(timeoutId);
+    return { text: "", isError: true };
   }
 }

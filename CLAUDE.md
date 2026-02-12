@@ -372,7 +372,7 @@ All processing paths now include intelligent model routing that classifies messa
 | **Sonnet** | claude-sonnet-4-5 | Medium tasks, unclear complexity | 5-15s |
 | **Opus** | claude-opus-4-6 | Research, analysis, strategy, long writing | 15-60s |
 
-- **Mac mode:** Routing is UX-only — all messages use Claude Code subprocess (free subscription). Sonnet/Opus tier shows "Working on it..." before the subprocess starts.
+- **Mac mode:** Routing is UX-only — all messages use Claude Code subprocess (free subscription). Sonnet/Opus tier uses **streaming subprocess** (`--output-format stream-json`) that sends live progress updates to Telegram: which tools are being used, first snippet of Claude's plan. Haiku tier uses standard subprocess (instant response, no progress needed).
 - **VPS mode:** Routing selects the actual model. Haiku uses direct API (fast), Sonnet/Opus use Agent SDK when enabled.
 - **Budget tracking:** Daily cost limit (`DAILY_API_BUDGET`, default $5). Auto-downgrades Opus→Sonnet when budget runs low.
 
@@ -480,7 +480,7 @@ src/
   lib/                   # Shared utilities
     env.ts               # Environment loader
     telegram.ts          # Telegram helpers
-    claude.ts            # Claude Code subprocess (local mode)
+    claude.ts            # Claude Code subprocess (local mode) + streaming progress
     anthropic-processor.ts  # Anthropic API processor (VPS mode, direct API)
     agent-session.ts     # Agent SDK processor (VPS mode, full Claude Code)
     model-router.ts      # Complexity classifier + tiered model selection

@@ -19,7 +19,7 @@ import { createWriteStream, existsSync } from "fs";
 
 import { loadEnv } from "./lib/env";
 import { sanitizeForTelegram, sendResponse, createTypingIndicator } from "./lib/telegram";
-import { callClaude as callClaudeSubprocess, isClaudeErrorResponse } from "./lib/claude";
+import { callClaude as callClaudeSubprocess, callClaudeStreaming, isClaudeErrorResponse } from "./lib/claude";
 import {
   processIntents,
   getMemoryContext,
@@ -1032,7 +1032,8 @@ These tags will be parsed automatically. Include them naturally in your response
 
 /**
  * Full flow: call Claude, persist response, process intents, send reply.
- * Used by text message handler for all Claude-routed messages.
+ * Uses streaming subprocess for sonnet/opus tier (live progress updates).
+ * Uses standard subprocess for haiku tier (fast, no progress needed).
  */
 async function callClaudeAndReply(
   ctx: Context,
@@ -1045,15 +1046,16 @@ async function callClaudeAndReply(
   typing.start();
 
   try {
-    // Show progress for complex tasks (subprocess can take 10-60s)
     const tier = classifyComplexity(userMessage);
-    if (tier !== "haiku") {
-      await ctx
-        .reply("_Working on it..._", { parse_mode: "Markdown" })
-        .catch(() => {});
-    }
+    let response: string;
 
-    const response = await callClaude(userMessage, chatId, agentName, topicId);
+    if (tier !== "haiku") {
+      // Complex task → streaming subprocess with live progress
+      response = await callClaudeWithProgress(ctx, userMessage, chatId, agentName, topicId);
+    } else {
+      // Simple task → standard subprocess (fast, no progress needed)
+      response = await callClaude(userMessage, chatId, agentName, topicId);
+    }
 
     // Persist bot response
     await saveMessage({
@@ -1095,6 +1097,139 @@ async function callClaudeAndReply(
   } finally {
     typing.stop();
   }
+}
+
+/**
+ * Call Claude with streaming subprocess — sends live progress to Telegram.
+ * Shows tool usage steps and first text snippet as the subprocess works.
+ */
+async function callClaudeWithProgress(
+  ctx: Context,
+  userMessage: string,
+  chatId: string,
+  agentName: string,
+  topicId?: number
+): Promise<string> {
+  const agentConfig = getAgentConfig(agentName);
+  const userProfile = await getUserProfile();
+  const memoryCtx = await getMemoryContext();
+  const conversationCtx = await getConversationContext(chatId, 10);
+
+  const now = new Date().toLocaleString("en-US", {
+    timeZone: TIMEZONE,
+    weekday: "long",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
+  // Build prompt (same as callClaude)
+  const sections: string[] = [];
+  if (agentConfig) {
+    sections.push(agentConfig.systemPrompt);
+  } else {
+    sections.push("You are Go, a personal AI assistant. Be concise, direct, and helpful.");
+  }
+  if (userProfile) sections.push(`## USER PROFILE\n${userProfile}`);
+  sections.push(`## CURRENT TIME\n${now}`);
+  if (memoryCtx) sections.push(`## MEMORY\n${memoryCtx}`);
+  if (conversationCtx) sections.push(`## RECENT CONVERSATION\n${conversationCtx}`);
+  if (sessionState.sessionId) {
+    sections.push(`## SESSION\nResuming session: ${sessionState.sessionId}`);
+  }
+  sections.push(`## INTENT DETECTION
+If the user sets a goal, include: [GOAL: description | DEADLINE: deadline]
+If a goal is completed, include: [DONE: partial match]
+If the user wants to cancel/abandon a goal, include: [CANCEL: partial match]
+If you learn a fact worth remembering, include: [REMEMBER: fact]
+If the user wants to forget a stored fact, include: [FORGET: partial match]
+These tags will be parsed automatically. Include them naturally in your response.`);
+  sections.push(`## USER MESSAGE\n${userMessage}`);
+
+  const fullPrompt = sections.join("\n\n---\n\n");
+
+  // Track progress message for editing
+  let progressMsgId: number | undefined;
+  let progressSteps: string[] = ["_Working on it..._"];
+
+  // Helper to send or edit progress message
+  const updateProgress = async (step: string) => {
+    progressSteps.push(`→ ${step}`);
+    const text = progressSteps.join("\n");
+    try {
+      if (!progressMsgId) {
+        const msg = await ctx.reply(text, { parse_mode: "Markdown" });
+        progressMsgId = msg.message_id;
+      } else {
+        await ctx.api.editMessageText(ctx.chat!.id, progressMsgId, text, {
+          parse_mode: "Markdown",
+        });
+      }
+    } catch {
+      // Edit can fail if text is identical or message too old — ignore
+    }
+  };
+
+  // Send initial progress
+  try {
+    const msg = await ctx.reply("_Working on it..._", { parse_mode: "Markdown" });
+    progressMsgId = msg.message_id;
+  } catch {}
+
+  // Call streaming subprocess
+  const result = await callClaudeStreaming({
+    prompt: fullPrompt,
+    ...(agentConfig?.allowedTools ? { allowedTools: agentConfig.allowedTools } : {}),
+    resumeSessionId: sessionState.sessionId || undefined,
+    timeoutMs: 1_800_000,
+    cwd: PROJECT_ROOT,
+    onToolStart: (toolName) => {
+      updateProgress(toolName);
+    },
+    onFirstText: (snippet) => {
+      // Show first sentence of Claude's thinking/plan
+      const clean = snippet.replace(/[_*`]/g, "").substring(0, 120);
+      if (clean.length > 20) {
+        updateProgress(`_"${clean}..."_`);
+      }
+    },
+  });
+
+  // Delete progress message before sending final response
+  if (progressMsgId) {
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, progressMsgId);
+    } catch {
+      // May fail if message is too old — that's fine
+    }
+  }
+
+  // Update session ID
+  if (result.sessionId) {
+    sessionState.sessionId = result.sessionId;
+    await saveSessionState();
+  }
+
+  // Handle errors with fallback
+  if (result.isError || !result.text) {
+    console.error("Claude streaming error, falling back to secondary LLM...");
+    await sbLog("warn", "bot", "Claude streaming failed, using fallback LLM", {
+      error: result.text?.substring(0, 200),
+    });
+
+    try {
+      const fallbackResponse = await callFallbackLLM(userMessage);
+      return `${fallbackResponse}\n\n_(responded via fallback)_`;
+    } catch (fallbackError) {
+      console.error("Fallback LLM also failed:", fallbackError);
+      return "I'm having trouble processing right now. Please try again in a moment.";
+    }
+  }
+
+  return result.text;
 }
 
 // ---------------------------------------------------------------------------
@@ -1161,7 +1296,7 @@ console.log(`Phone:       ${isCallEnabled() ? "enabled" : "disabled"}`);
 console.log(`Transcribe:  ${isTranscriptionEnabled() ? "enabled" : "disabled"}`);
 console.log(`Session:     ${sessionState.sessionId || "new"}`);
 console.log(`HITL:        enabled (inline buttons + task queue)`);
-console.log(`Routing:     model tier (haiku/sonnet/opus → progress UX)`);
+console.log(`Routing:     model tier (haiku→instant, sonnet/opus→streaming progress)`);
 console.log("=".repeat(50));
 
 await sbLog("info", "bot", "Bot started", {
