@@ -251,6 +251,62 @@ export async function summarizeTranscript(
 }
 
 /**
+ * Extract an actionable task from a call transcript.
+ * Returns the task description as a direct instruction, or null if no task.
+ */
+export async function extractTaskFromTranscript(
+  transcript: string,
+  summary: string
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 256,
+      messages: [
+        {
+          role: "user",
+          content: `Analyze this phone call transcript and summary. Did the caller request a specific actionable task?
+
+SUMMARY: ${summary}
+
+TRANSCRIPT (last 2000 chars):
+${transcript.slice(-2000)}
+
+If there is a clear, actionable task request (e.g. "create a presentation", "draft an email", "research X", "set up Y"), respond with ONLY the task description as a direct instruction. Start with a verb.
+
+If there is NO actionable task (just a conversation, check-in, or general discussion), respond with exactly: NONE`,
+        },
+      ],
+    });
+
+    const textBlocks = response.content.filter(
+      (b): b is { type: "text"; text: string } => b.type === "text"
+    );
+    const output = textBlocks.map((b) => b.text).join("").trim();
+
+    if (
+      !output ||
+      output === "NONE" ||
+      output.toLowerCase().includes("no actionable task") ||
+      output.length < 10
+    ) {
+      return null;
+    }
+
+    return output.replace(/^["']|["']$/g, "").replace(/^Task:\s*/i, "").trim();
+  } catch (err: any) {
+    console.error("Task extraction error:", err.message);
+    return null;
+  }
+}
+
+/**
  * Build dynamic context payload for ElevenLabs voice agent.
  * Called by the /context endpoint when ElevenLabs agent starts a call.
  */

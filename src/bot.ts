@@ -33,7 +33,7 @@ import {
 } from "./lib/memory";
 import { uploadAssetQuick, updateAssetDescription, parseAssetDescTag, stripAssetDescTag } from "./lib/asset-store";
 import { callFallbackLLM } from "./lib/fallback-llm";
-import { textToSpeech, initiatePhoneCall, isVoiceEnabled, isCallEnabled, waitForTranscript } from "./lib/voice";
+import { textToSpeech, initiatePhoneCall, isVoiceEnabled, isCallEnabled, waitForTranscript, summarizeTranscript, extractTaskFromTranscript } from "./lib/voice";
 import { transcribeAudio, isTranscriptionEnabled } from "./lib/transcribe";
 import {
   saveMessage,
@@ -464,17 +464,34 @@ async function handleTextMessage(ctx: Context): Promise<void> {
       if (result.conversationId) {
         waitForTranscript(result.conversationId).then(async (transcript) => {
           if (transcript) {
-            // Save transcript to memory
+            // Summarize and save transcript
+            const summary = await summarizeTranscript(transcript);
             await saveMessage({
               chat_id: chatId,
               role: "assistant",
-              content: `[Phone call transcript]\n${transcript}`,
+              content: `[Phone call transcript]\n${transcript}\n\n[Summary]\n${summary}`,
               metadata: { type: "call_transcript", conversationId: result.conversationId },
             });
-            await ctx.reply(`Call transcript saved.`);
+            await ctx.reply(`*Call Summary*\n\n${summary}`, { parse_mode: "Markdown" })
+              .catch(() => ctx.reply(`Call Summary\n\n${summary}`));
+
+            // Extract and auto-execute any tasks from the call
+            try {
+              const task = await extractTaskFromTranscript(transcript, summary);
+              if (task) {
+                console.log(`Task detected from call: "${task.substring(0, 80)}"`);
+                await ctx.reply(`*Starting task from call:*\n${task}`, { parse_mode: "Markdown" })
+                  .catch(() => ctx.reply(`Starting task from call:\n${task}`));
+
+                // Use the full callClaudeAndReply flow (handles streaming, intents, HITL)
+                await callClaudeAndReply(ctx, chatId, task, "general", topicId);
+              }
+            } catch (taskErr) {
+              console.error("Call task extraction/execution failed:", taskErr);
+            }
           }
-        }).catch(() => {
-          // Transcript polling failed silently
+        }).catch((err) => {
+          console.error("Transcript polling failed:", err);
         });
       }
     } else {

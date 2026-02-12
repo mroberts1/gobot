@@ -1,5 +1,24 @@
 # Gobot Changelog
 
+## v2.3.0 — 2026-02-12
+
+**Call-to-Task Auto-Execution**
+
+- **Auto-task from calls** — When you end a phone call with the bot, it now detects actionable tasks in the transcript (e.g. "create a presentation", "research X") and automatically starts executing them. You'll see a "Starting task from call" notification followed by live progress updates in Telegram.
+- **Works everywhere** — Task auto-execution routes through the same hybrid pipeline: Mac-local (Claude Code, free) when awake, VPS (Anthropic API) when offline.
+- **Call summary improvements (Mac)** — Mac-initiated calls now get a proper summary sent to Telegram (previously only saved transcript silently).
+
+### Updated
+- `src/lib/voice.ts` — Added `extractTaskFromTranscript()` using Haiku for fast, cheap task detection
+- `src/vps-gateway.ts` — Added `executeCallTask()` + `processCallTaskOnVPS()`, wired into both webhook and polling transcript paths
+- `src/bot.ts` — Mac call handler now summarizes transcripts and auto-executes detected tasks via `callClaudeAndReply()`
+
+### Compatibility
+- Fully backward compatible. No config changes required.
+- Requires `ANTHROPIC_API_KEY` for task extraction (uses Haiku). Without it, calls work as before (summary only, no auto-execution).
+
+---
+
 ## v2.2.0 — 2026-02-12
 
 **Persistent Image Storage + Formatting Fixes**
