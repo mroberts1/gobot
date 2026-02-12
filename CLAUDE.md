@@ -362,9 +362,38 @@ The key insight: **Claude Code CLI works with an `ANTHROPIC_API_KEY` environment
 
 This means: **clone the repo on VPS, install Claude Code, set your API key, and run `bun run start`.** Same experience as local. One codebase everywhere.
 
-### VPS Gateway (Optional Speed Optimization)
+### Tiered Model Routing
 
-For faster responses, the VPS gateway (`src/vps-gateway.ts`) uses the Anthropic Messages API directly — no Claude Code overhead. Responds in 2-5s instead of 10-60s, but with limited capabilities (Supabase context only, no MCP servers or skills). Use this if speed matters more than tool access.
+All processing paths now include intelligent model routing that classifies message complexity:
+
+| Tier | Model | When | Response Time |
+|------|-------|------|--------------|
+| **Haiku** | claude-haiku-4-5 | Greetings, status checks, short questions | 2-5s |
+| **Sonnet** | claude-sonnet-4-5 | Medium tasks, unclear complexity | 5-15s |
+| **Opus** | claude-opus-4-6 | Research, analysis, strategy, long writing | 15-60s |
+
+- **Mac mode:** Routing is UX-only — all messages use Claude Code subprocess (free subscription). Sonnet/Opus tier uses **streaming subprocess** (`--output-format stream-json`) that sends live progress updates to Telegram: which tools are being used, first snippet of Claude's plan. Haiku tier uses standard subprocess (instant response, no progress needed).
+- **VPS mode:** Routing selects the actual model. Haiku uses direct API (fast), Sonnet/Opus use Agent SDK when enabled.
+- **Budget tracking:** Daily cost limit (`DAILY_API_BUDGET`, default $5). Auto-downgrades Opus→Sonnet when budget runs low.
+
+### VPS Gateway + Agent SDK
+
+The VPS gateway (`src/vps-gateway.ts`) now supports two processing modes:
+
+**Direct API (default):** Anthropic Messages API with 2 tools (ask_user, phone_call). Fast (2-5s) but limited capabilities. Used for all Haiku requests and when Agent SDK is disabled.
+
+**Agent SDK (`USE_AGENT_SDK=true`):** Full Claude Code capabilities on VPS for Sonnet/Opus requests. The Agent SDK spawns a Claude Code subprocess that loads:
+- Your `CLAUDE.md` (project instructions)
+- Your MCP servers (from Claude Code settings via `settingSources: ["project"]`)
+- Your skills and hooks
+- Built-in tools (Read, Write, Bash, WebSearch, etc.)
+- Session persistence for HITL resume
+
+To enable: set `USE_AGENT_SDK=true` in your VPS `.env`. Requires `@anthropic-ai/claude-agent-sdk` (installed via `bun install`).
+
+### VPS Gateway (Legacy Direct API)
+
+When Agent SDK is disabled (or for Haiku tier), the VPS gateway falls back to direct Anthropic Messages API — no Claude Code overhead. Responds in 2-5s but with limited capabilities (Supabase context only, no MCP servers or skills).
 
 ### Hybrid Mode
 
@@ -451,8 +480,10 @@ src/
   lib/                   # Shared utilities
     env.ts               # Environment loader
     telegram.ts          # Telegram helpers
-    claude.ts            # Claude Code subprocess (local mode)
-    anthropic-processor.ts  # Anthropic API processor (VPS mode)
+    claude.ts            # Claude Code subprocess (local mode) + streaming progress
+    anthropic-processor.ts  # Anthropic API processor (VPS mode, direct API)
+    agent-session.ts     # Agent SDK processor (VPS mode, full Claude Code)
+    model-router.ts      # Complexity classifier + tiered model selection
     mac-health.ts        # Local machine health checking (hybrid mode)
     task-queue.ts        # Human-in-the-loop task management
     supabase.ts          # Database client + async tasks + heartbeat

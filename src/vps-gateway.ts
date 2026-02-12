@@ -27,6 +27,12 @@ import {
 import { processWithAnthropic } from "./lib/anthropic-processor";
 import type { ResumeState } from "./lib/anthropic-processor";
 import {
+  processWithAgentSDK,
+  getDailyBudgetRemaining,
+} from "./lib/agent-session";
+import type { AgentResumeState } from "./lib/agent-session";
+import { selectModelForMessage } from "./lib/model-router";
+import {
   textToSpeech,
   buildVoiceAgentContext,
   summarizeTranscript,
@@ -263,6 +269,50 @@ function startCallTranscriptPolling(
 }
 
 // ============================================================
+// TIERED VPS PROCESSING
+// ============================================================
+
+/**
+ * Process a message on VPS with tiered model routing.
+ *
+ * - Haiku (simple) → Direct Anthropic API (fast, 2-5s)
+ * - Sonnet/Opus (complex) → Agent SDK if enabled (full Claude Code)
+ * - Fallback: Direct API for all tiers when Agent SDK is disabled
+ */
+async function processOnVPS(
+  text: string,
+  chatId: string,
+  ctx: Context,
+  onCallInitiated?: (conversationId: string) => void
+): Promise<string> {
+  const useAgentSDK = process.env.USE_AGENT_SDK === "true";
+  const { tier, model } = selectModelForMessage(
+    text,
+    useAgentSDK ? getDailyBudgetRemaining() : undefined
+  );
+
+  if (useAgentSDK && tier !== "haiku") {
+    // Sonnet/Opus → Agent SDK (full Claude Code capabilities)
+    console.log(`Agent SDK: ${tier.toUpperCase()} (${model})`);
+    await ctx
+      .reply("_Working on it..._", { parse_mode: "Markdown" })
+      .catch(() => {});
+    return processWithAgentSDK(text, chatId, ctx, undefined, onCallInitiated);
+  }
+
+  // Haiku or Agent SDK disabled → Direct API (fast, cheap)
+  console.log(`Direct API: ${tier.toUpperCase()} (${model})`);
+  return processWithAnthropic(
+    text,
+    chatId,
+    ctx,
+    undefined,
+    onCallInitiated || ((convId) => startCallTranscriptPolling(convId, chatId)),
+    model
+  );
+}
+
+// ============================================================
 // MESSAGE HANDLER — Smart Routing
 // ============================================================
 
@@ -345,23 +395,11 @@ bot.on("message:text", async (ctx) => {
         console.log(
           `Local forwarding failed (${localResult.error}), processing on VPS...`
         );
-        response = await processWithAnthropic(
-          text,
-          chatId,
-          ctx,
-          undefined,
-          (convId) => startCallTranscriptPolling(convId, chatId)
-        );
+        response = await processOnVPS(text, chatId, ctx);
       }
     } else {
       console.log("Local machine down, processing on VPS...");
-      response = await processWithAnthropic(
-        text,
-        chatId,
-        ctx,
-        undefined,
-        (convId) => startCallTranscriptPolling(convId, chatId)
-      );
+      response = await processOnVPS(text, chatId, ctx);
     }
   } finally {
     clearInterval(typingInterval);
@@ -432,32 +470,17 @@ bot.on("message:voice", async (ctx) => {
       let processedBy = NODE_ID;
 
       try {
+        const voiceText = `[Voice message transcription]: ${transcription}`;
         if (isMacAlive()) {
-          const localResult = await forwardToLocal(
-            `[Voice message transcription]: ${transcription}`,
-            chatId,
-            threadId
-          );
+          const localResult = await forwardToLocal(voiceText, chatId, threadId);
           if (localResult.success && localResult.response) {
             response = localResult.response;
             processedBy = "local";
           } else {
-            response = await processWithAnthropic(
-              `[Voice message transcription]: ${transcription}`,
-              chatId,
-              ctx,
-              undefined,
-              (convId) => startCallTranscriptPolling(convId, chatId)
-            );
+            response = await processOnVPS(voiceText, chatId, ctx);
           }
         } else {
-          response = await processWithAnthropic(
-            `[Voice message transcription]: ${transcription}`,
-            chatId,
-            ctx,
-            undefined,
-            (convId) => startCallTranscriptPolling(convId, chatId)
-          );
+          response = await processOnVPS(voiceText, chatId, ctx);
         }
       } finally {
         clearInterval(typingInterval);
@@ -523,7 +546,60 @@ bot.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    // Check if task has messages_snapshot for proper resume
+    // Agent SDK resume: task has session_id from Agent SDK
+    if (
+      result.task?.metadata?.use_agent_sdk &&
+      result.task?.metadata?.agent_sdk_session_id
+    ) {
+      console.log(
+        `Resuming via Agent SDK: task=${result.taskId}, session=${result.task.metadata.agent_sdk_session_id}`
+      );
+      await ctx
+        .editMessageText(`Got it: "${result.choice}". Resuming...`)
+        .catch(() => {});
+
+      const agentResume: AgentResumeState = {
+        taskId: result.taskId,
+        sessionId: result.task.metadata.agent_sdk_session_id,
+        userChoice: result.choice,
+        originalPrompt: result.task.original_prompt,
+      };
+
+      const response = await processWithAgentSDK(
+        result.task.original_prompt,
+        chatId,
+        ctx,
+        agentResume
+      );
+
+      if (response) {
+        await supabase
+          .saveMessage({
+            chat_id: chatId,
+            role: "assistant",
+            content: response,
+            metadata: {
+              telegram_chat_id: ctx.chat?.id,
+              processed_by: NODE_ID,
+              resumed_from_task: result.taskId,
+            },
+          })
+          .catch(() => {});
+
+        await sendResponse(ctx, response);
+      }
+
+      await supabase
+        .updateTask(result.taskId, {
+          status: "completed",
+          result: response?.substring(0, 1000) || "Completed",
+        })
+        .catch(() => {});
+
+      return;
+    }
+
+    // Legacy resume: task has messages_snapshot from direct Anthropic API
     if (result.task?.metadata?.messages_snapshot) {
       console.log(
         `Resuming from ask_user: task=${result.taskId}, choice="${result.choice}"`
@@ -808,6 +884,7 @@ const server = Bun.serve({
   },
 });
 
+const useAgentSDK = process.env.USE_AGENT_SDK === "true";
 console.log(`
 VPS Gateway started!
   Port: ${PORT}
@@ -819,6 +896,9 @@ VPS Gateway started!
   Webhook: /webhook/elevenlabs
   Deploy: /deploy${DEPLOY_SECRET ? " [configured]" : " [NOT configured]"}
   Local health: ${process.env.MAC_HEALTH_URL || "(Supabase heartbeat only)"}
+  Model routing: enabled (haiku/sonnet/opus)
+  Agent SDK: ${useAgentSDK ? "enabled (sonnet/opus → full Claude Code)" : "disabled (direct API only)"}
+  Daily budget: $${process.env.DAILY_API_BUDGET || "5.00"}
 `);
 
 supabase.testConnection().catch(() => {});

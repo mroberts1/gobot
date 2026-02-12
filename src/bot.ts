@@ -19,7 +19,7 @@ import { createWriteStream, existsSync } from "fs";
 
 import { loadEnv } from "./lib/env";
 import { sanitizeForTelegram, sendResponse, createTypingIndicator } from "./lib/telegram";
-import { callClaude as callClaudeSubprocess, isClaudeErrorResponse } from "./lib/claude";
+import { callClaude as callClaudeSubprocess, callClaudeStreaming, isClaudeErrorResponse } from "./lib/claude";
 import {
   processIntents,
   getMemoryContext,
@@ -58,6 +58,13 @@ import {
   processWithAnthropic,
   type ResumeState,
 } from "./lib/anthropic-processor";
+import {
+  processWithAgentSDK,
+  type AgentResumeState,
+} from "./lib/agent-session";
+
+// Model Router (UX-only on Mac — controls progress updates, not model selection)
+import { classifyComplexity } from "./lib/model-router";
 
 // Agents
 import {
@@ -750,6 +757,51 @@ async function handleCallbackQuery(ctx: Context): Promise<void> {
     )
     .catch(() => {});
 
+  // --- Agent SDK resume: task has session_id from Agent SDK ---
+  if (task.metadata?.use_agent_sdk && task.metadata?.agent_sdk_session_id) {
+    const typing = createTypingIndicator(ctx);
+    typing.start();
+
+    try {
+      const agentResume: AgentResumeState = {
+        taskId: result.taskId,
+        sessionId: task.metadata.agent_sdk_session_id,
+        userChoice: result.choice,
+        originalPrompt: task.original_prompt,
+      };
+
+      const response = await processWithAgentSDK(
+        task.original_prompt,
+        chatId,
+        ctx,
+        agentResume
+      );
+
+      if (response) {
+        await saveMessage({
+          chat_id: chatId,
+          role: "assistant",
+          content: response,
+          metadata: { type: "agent_sdk_resume", taskId: result.taskId },
+        });
+        await processIntents(response);
+        await sendResponse(ctx, response);
+      }
+
+      await updateTask(result.taskId, {
+        status: "completed",
+        result: response ? response.substring(0, 10000) : "Continued in new task",
+      });
+    } catch (err) {
+      console.error("Agent SDK resume error:", err);
+      await ctx.reply("Error resuming task. Please try again.");
+      await updateTask(result.taskId, { status: "failed", result: String(err) });
+    } finally {
+      typing.stop();
+    }
+    return;
+  }
+
   // --- VPS mode resume: task has messages_snapshot from Anthropic API ---
   if (task.metadata?.messages_snapshot) {
     const typing = createTypingIndicator(ctx);
@@ -980,7 +1032,8 @@ These tags will be parsed automatically. Include them naturally in your response
 
 /**
  * Full flow: call Claude, persist response, process intents, send reply.
- * Used by text message handler for all Claude-routed messages.
+ * Uses streaming subprocess for sonnet/opus tier (live progress updates).
+ * Uses standard subprocess for haiku tier (fast, no progress needed).
  */
 async function callClaudeAndReply(
   ctx: Context,
@@ -993,7 +1046,16 @@ async function callClaudeAndReply(
   typing.start();
 
   try {
-    const response = await callClaude(userMessage, chatId, agentName, topicId);
+    const tier = classifyComplexity(userMessage);
+    let response: string;
+
+    if (tier !== "haiku") {
+      // Complex task → streaming subprocess with live progress
+      response = await callClaudeWithProgress(ctx, userMessage, chatId, agentName, topicId);
+    } else {
+      // Simple task → standard subprocess (fast, no progress needed)
+      response = await callClaude(userMessage, chatId, agentName, topicId);
+    }
 
     // Persist bot response
     await saveMessage({
@@ -1035,6 +1097,139 @@ async function callClaudeAndReply(
   } finally {
     typing.stop();
   }
+}
+
+/**
+ * Call Claude with streaming subprocess — sends live progress to Telegram.
+ * Shows tool usage steps and first text snippet as the subprocess works.
+ */
+async function callClaudeWithProgress(
+  ctx: Context,
+  userMessage: string,
+  chatId: string,
+  agentName: string,
+  topicId?: number
+): Promise<string> {
+  const agentConfig = getAgentConfig(agentName);
+  const userProfile = await getUserProfile();
+  const memoryCtx = await getMemoryContext();
+  const conversationCtx = await getConversationContext(chatId, 10);
+
+  const now = new Date().toLocaleString("en-US", {
+    timeZone: TIMEZONE,
+    weekday: "long",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
+  // Build prompt (same as callClaude)
+  const sections: string[] = [];
+  if (agentConfig) {
+    sections.push(agentConfig.systemPrompt);
+  } else {
+    sections.push("You are Go, a personal AI assistant. Be concise, direct, and helpful.");
+  }
+  if (userProfile) sections.push(`## USER PROFILE\n${userProfile}`);
+  sections.push(`## CURRENT TIME\n${now}`);
+  if (memoryCtx) sections.push(`## MEMORY\n${memoryCtx}`);
+  if (conversationCtx) sections.push(`## RECENT CONVERSATION\n${conversationCtx}`);
+  if (sessionState.sessionId) {
+    sections.push(`## SESSION\nResuming session: ${sessionState.sessionId}`);
+  }
+  sections.push(`## INTENT DETECTION
+If the user sets a goal, include: [GOAL: description | DEADLINE: deadline]
+If a goal is completed, include: [DONE: partial match]
+If the user wants to cancel/abandon a goal, include: [CANCEL: partial match]
+If you learn a fact worth remembering, include: [REMEMBER: fact]
+If the user wants to forget a stored fact, include: [FORGET: partial match]
+These tags will be parsed automatically. Include them naturally in your response.`);
+  sections.push(`## USER MESSAGE\n${userMessage}`);
+
+  const fullPrompt = sections.join("\n\n---\n\n");
+
+  // Track progress message for editing
+  let progressMsgId: number | undefined;
+  let progressSteps: string[] = ["_Working on it..._"];
+
+  // Helper to send or edit progress message
+  const updateProgress = async (step: string) => {
+    progressSteps.push(`→ ${step}`);
+    const text = progressSteps.join("\n");
+    try {
+      if (!progressMsgId) {
+        const msg = await ctx.reply(text, { parse_mode: "Markdown" });
+        progressMsgId = msg.message_id;
+      } else {
+        await ctx.api.editMessageText(ctx.chat!.id, progressMsgId, text, {
+          parse_mode: "Markdown",
+        });
+      }
+    } catch {
+      // Edit can fail if text is identical or message too old — ignore
+    }
+  };
+
+  // Send initial progress
+  try {
+    const msg = await ctx.reply("_Working on it..._", { parse_mode: "Markdown" });
+    progressMsgId = msg.message_id;
+  } catch {}
+
+  // Call streaming subprocess
+  const result = await callClaudeStreaming({
+    prompt: fullPrompt,
+    ...(agentConfig?.allowedTools ? { allowedTools: agentConfig.allowedTools } : {}),
+    resumeSessionId: sessionState.sessionId || undefined,
+    timeoutMs: 1_800_000,
+    cwd: PROJECT_ROOT,
+    onToolStart: (toolName) => {
+      updateProgress(toolName);
+    },
+    onFirstText: (snippet) => {
+      // Show first sentence of Claude's thinking/plan
+      const clean = snippet.replace(/[_*`]/g, "").substring(0, 120);
+      if (clean.length > 20) {
+        updateProgress(`_"${clean}..."_`);
+      }
+    },
+  });
+
+  // Delete progress message before sending final response
+  if (progressMsgId) {
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, progressMsgId);
+    } catch {
+      // May fail if message is too old — that's fine
+    }
+  }
+
+  // Update session ID
+  if (result.sessionId) {
+    sessionState.sessionId = result.sessionId;
+    await saveSessionState();
+  }
+
+  // Handle errors with fallback
+  if (result.isError || !result.text) {
+    console.error("Claude streaming error, falling back to secondary LLM...");
+    await sbLog("warn", "bot", "Claude streaming failed, using fallback LLM", {
+      error: result.text?.substring(0, 200),
+    });
+
+    try {
+      const fallbackResponse = await callFallbackLLM(userMessage);
+      return `${fallbackResponse}\n\n_(responded via fallback)_`;
+    } catch (fallbackError) {
+      console.error("Fallback LLM also failed:", fallbackError);
+      return "I'm having trouble processing right now. Please try again in a moment.";
+    }
+  }
+
+  return result.text;
 }
 
 // ---------------------------------------------------------------------------
@@ -1101,6 +1296,7 @@ console.log(`Phone:       ${isCallEnabled() ? "enabled" : "disabled"}`);
 console.log(`Transcribe:  ${isTranscriptionEnabled() ? "enabled" : "disabled"}`);
 console.log(`Session:     ${sessionState.sessionId || "new"}`);
 console.log(`HITL:        enabled (inline buttons + task queue)`);
+console.log(`Routing:     model tier (haiku→instant, sonnet/opus→streaming progress)`);
 console.log("=".repeat(50));
 
 await sbLog("info", "bot", "Bot started", {
