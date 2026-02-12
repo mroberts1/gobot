@@ -266,7 +266,7 @@ export async function callClaudeStreaming(options: ClaudeStreamOptions): Promise
     onFirstText,
   } = options;
 
-  const args = ["-p", prompt, "--output-format", "stream-json", "--dangerously-skip-permissions"];
+  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
 
   if (allowedTools && allowedTools.length > 0) {
     args.push("--allowedTools", allowedTools.join(","));
