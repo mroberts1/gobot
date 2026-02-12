@@ -37,6 +37,7 @@ import {
   buildVoiceAgentContext,
   summarizeTranscript,
   getCallTranscript,
+  extractTaskFromTranscript,
 } from "./lib/voice";
 import { transcribeAudioBuffer } from "./lib/transcribe";
 import {
@@ -267,6 +268,20 @@ function startCallTranscriptPolling(
           })
           .catch(() => {});
 
+        // Extract and auto-execute any tasks from the call
+        extractTaskFromTranscript(transcript, summary)
+          .then(async (task) => {
+            if (task) {
+              console.log(
+                `Task detected from call: "${task.substring(0, 80)}"`
+              );
+              await executeCallTask(task, chatId);
+            }
+          })
+          .catch((err) =>
+            console.error("Call task extraction failed:", err)
+          );
+
         return; // Done
       } catch (err: any) {
         console.error(
@@ -280,6 +295,163 @@ function startCallTranscriptPolling(
       `Transcript polling timed out for ${conversationId} after ${MAX_ATTEMPTS} attempts`
     );
   })();
+}
+
+// ============================================================
+// CALL TASK AUTO-EXECUTION
+// ============================================================
+
+/**
+ * Execute a task extracted from a call transcript.
+ * Routes to local Mac (if alive) or processes on VPS directly.
+ * Sends progress + result to Telegram.
+ */
+async function executeCallTask(
+  taskDescription: string,
+  chatId: string
+): Promise<void> {
+  console.log(
+    `Executing call task: "${taskDescription.substring(0, 80)}..."`
+  );
+
+  // Notify user that task is starting
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `*Starting task from call:*\n${taskDescription}`,
+      parse_mode: "Markdown",
+    }),
+  }).catch(() => {
+    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `Starting task from call:\n${taskDescription}`,
+      }),
+    }).catch(() => {});
+  });
+
+  try {
+    let response: string;
+
+    if (isMacAlive()) {
+      // Forward to local machine for Claude Code processing
+      console.log("Routing call task to local machine...");
+      const localResult = await forwardToLocal(taskDescription, chatId);
+      if (localResult.success && localResult.response) {
+        response = localResult.response;
+      } else {
+        console.log(
+          `Local forwarding failed (${localResult.error}), processing call task on VPS...`
+        );
+        response = await processCallTaskOnVPS(taskDescription, chatId);
+      }
+    } else {
+      console.log("Local machine down, processing call task on VPS...");
+      response = await processCallTaskOnVPS(taskDescription, chatId);
+    }
+
+    // Send result
+    if (response) {
+      // Convert bold and send
+      response = response.replace(/\*\*(.+?)\*\*/g, "*$1*");
+
+      const MAX_LENGTH = 4096;
+      if (response.length <= MAX_LENGTH) {
+        await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: response,
+              parse_mode: "Markdown",
+            }),
+          }
+        ).catch(() => {
+          fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: chatId, text: response }),
+            }
+          ).catch(() => {});
+        });
+      } else {
+        // Split long responses
+        let remaining = response;
+        while (remaining.length > 0) {
+          const chunk = remaining.substring(0, MAX_LENGTH);
+          remaining = remaining.substring(MAX_LENGTH);
+          await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: chatId, text: chunk }),
+            }
+          ).catch(() => {});
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error("Call task execution error:", error);
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `Task from call failed: ${error.message?.substring(0, 200) || "Unknown error"}`,
+      }),
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Process a call task directly on VPS using Anthropic API.
+ */
+async function processCallTaskOnVPS(
+  taskDescription: string,
+  chatId: string
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return "Cannot process task — no API key configured.";
+
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+
+    const { model } = selectModelForMessage(taskDescription);
+
+    const response = await client.messages.create({
+      model,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: taskDescription,
+        },
+      ],
+      system:
+        "You are Go, a personal AI assistant. Execute the requested task thoroughly and provide a complete response.",
+    });
+
+    const textBlocks = response.content.filter(
+      (b): b is { type: "text"; text: string } => b.type === "text"
+    );
+    return (
+      textBlocks.map((b) => b.text).join("\n") ||
+      "Task completed but no output generated."
+    );
+  } catch (err: any) {
+    console.error("VPS task processing error:", err.message);
+    return `Task processing failed: ${err.message}`;
+  }
 }
 
 // ============================================================
@@ -956,6 +1128,20 @@ const server = Bun.serve({
               },
             })
             .catch(() => {});
+
+          // Extract and auto-execute any tasks from the call
+          extractTaskFromTranscript(transcriptText, summary)
+            .then(async (task) => {
+              if (task) {
+                console.log(
+                  `Task detected from webhook call: "${task.substring(0, 80)}"`
+                );
+                await executeCallTask(task, ALLOWED_USER_ID);
+              }
+            })
+            .catch((err) =>
+              console.error("Call task extraction failed:", err)
+            );
         }
 
         return new Response(JSON.stringify({ ok: true }), {
