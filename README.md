@@ -20,6 +20,7 @@ You ──▶ Telegram ──▶ Bot ─┤
 - **Relay**: Send messages on Telegram, get Claude responses back
 - **Multi-Agent**: Route messages to specialized agents via Telegram forum topics
 - **Memory**: Persistent facts, goals, and conversation history via Supabase
+- **Image Storage**: Photos stored persistently with AI-generated descriptions, tags, and semantic search
 - **Proactive**: Smart check-ins that know when to reach out (and when not to)
 - **Briefings**: Daily morning summary with goals and whatever context your MCP servers provide
 - **Voice**: Text-to-speech replies, voice transcription, and phone calls
@@ -91,7 +92,7 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
 | Telegram SDK | [grammY](https://grammy.dev) |
 | AI (Local) | [Claude Code](https://claude.ai/claude-code) CLI |
 | AI (VPS) | [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) |
-| Database | [Supabase](https://supabase.com) (PostgreSQL) |
+| Database | [Supabase](https://supabase.com) (PostgreSQL + Storage) |
 | Always-On | macOS launchd / PM2 + cron / VPS webhook mode |
 | Voice (opt.) | [ElevenLabs](https://elevenlabs.io) |
 | Phone Calls (opt.) | ElevenLabs + [Twilio](https://twilio.com) |
@@ -112,6 +113,7 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
                     │  Supabase    │
                     │  - Messages  │
                     │  - Memory    │
+                    │  - Assets    │
                     │  - Logs      │
                     └──────────────┘
 ```
@@ -127,7 +129,8 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
                     │  Supabase    │     │  ✅ Hooks            │
                     │  - Messages  │     │  ✅ CLAUDE.md        │
                     │  - Memory    │     │  ✅ Built-in Tools   │
-                    │  - Tasks     │     └─────────────────────┘
+                    │  - Assets    │     └─────────────────────┘
+                    │  - Tasks     │
                     └──────────────┘
 ```
 
