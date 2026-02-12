@@ -293,11 +293,12 @@ export async function processWithAnthropic(
   chatId: string,
   ctx: Context,
   resumeState?: ResumeState,
-  onCallInitiated?: (conversationId: string) => void
+  onCallInitiated?: (conversationId: string) => void,
+  model?: string
 ): Promise<string> {
   const anthropic = getClient();
   const startTime = Date.now();
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
+  const effectiveModel = model || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
 
   // Get conversation context from Supabase
   let contextStr = "";
@@ -357,7 +358,7 @@ export async function processWithAnthropic(
       iterations++;
 
       const response = await anthropic.messages.create({
-        model,
+        model: effectiveModel,
         max_tokens: 4096,
         system: systemPrompt,
         tools,

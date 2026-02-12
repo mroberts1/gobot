@@ -58,6 +58,13 @@ import {
   processWithAnthropic,
   type ResumeState,
 } from "./lib/anthropic-processor";
+import {
+  processWithAgentSDK,
+  type AgentResumeState,
+} from "./lib/agent-session";
+
+// Model Router (UX-only on Mac — controls progress updates, not model selection)
+import { classifyComplexity } from "./lib/model-router";
 
 // Agents
 import {
@@ -750,6 +757,51 @@ async function handleCallbackQuery(ctx: Context): Promise<void> {
     )
     .catch(() => {});
 
+  // --- Agent SDK resume: task has session_id from Agent SDK ---
+  if (task.metadata?.use_agent_sdk && task.metadata?.agent_sdk_session_id) {
+    const typing = createTypingIndicator(ctx);
+    typing.start();
+
+    try {
+      const agentResume: AgentResumeState = {
+        taskId: result.taskId,
+        sessionId: task.metadata.agent_sdk_session_id,
+        userChoice: result.choice,
+        originalPrompt: task.original_prompt,
+      };
+
+      const response = await processWithAgentSDK(
+        task.original_prompt,
+        chatId,
+        ctx,
+        agentResume
+      );
+
+      if (response) {
+        await saveMessage({
+          chat_id: chatId,
+          role: "assistant",
+          content: response,
+          metadata: { type: "agent_sdk_resume", taskId: result.taskId },
+        });
+        await processIntents(response);
+        await sendResponse(ctx, response);
+      }
+
+      await updateTask(result.taskId, {
+        status: "completed",
+        result: response ? response.substring(0, 10000) : "Continued in new task",
+      });
+    } catch (err) {
+      console.error("Agent SDK resume error:", err);
+      await ctx.reply("Error resuming task. Please try again.");
+      await updateTask(result.taskId, { status: "failed", result: String(err) });
+    } finally {
+      typing.stop();
+    }
+    return;
+  }
+
   // --- VPS mode resume: task has messages_snapshot from Anthropic API ---
   if (task.metadata?.messages_snapshot) {
     const typing = createTypingIndicator(ctx);
@@ -993,6 +1045,14 @@ async function callClaudeAndReply(
   typing.start();
 
   try {
+    // Show progress for complex tasks (subprocess can take 10-60s)
+    const tier = classifyComplexity(userMessage);
+    if (tier !== "haiku") {
+      await ctx
+        .reply("_Working on it..._", { parse_mode: "Markdown" })
+        .catch(() => {});
+    }
+
     const response = await callClaude(userMessage, chatId, agentName, topicId);
 
     // Persist bot response
@@ -1101,6 +1161,7 @@ console.log(`Phone:       ${isCallEnabled() ? "enabled" : "disabled"}`);
 console.log(`Transcribe:  ${isTranscriptionEnabled() ? "enabled" : "disabled"}`);
 console.log(`Session:     ${sessionState.sessionId || "new"}`);
 console.log(`HITL:        enabled (inline buttons + task queue)`);
+console.log(`Routing:     model tier (haiku/sonnet/opus → progress UX)`);
 console.log("=".repeat(50));
 
 await sbLog("info", "bot", "Bot started", {
