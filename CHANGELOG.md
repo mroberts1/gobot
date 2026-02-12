@@ -1,5 +1,34 @@
 # Gobot Changelog
 
+## v2.1.0 — 2026-02-12
+
+**Smart Routing + Streaming Progress + Agent SDK**
+
+- **Tiered model routing** — Messages auto-classified by complexity: Haiku (simple, fast, cheap), Sonnet (medium), Opus (complex, powerful). ~60% of messages route to Haiku, saving 50-60% on VPS API costs.
+- **Streaming progress updates (Mac)** — Complex tasks show real-time progress in Telegram: which tools are being used, Claude's initial plan. Progress updates in-place and disappears when done. Simple messages respond instantly.
+- **Agent SDK on VPS (optional)** — Full Claude Code capabilities for Sonnet/Opus VPS requests. Loads your MCP servers, skills, hooks, and CLAUDE.md. Enable with `USE_AGENT_SDK=true`.
+- **Human-in-the-loop everywhere** — Inline button confirmations work consistently across Mac (subprocess resume), VPS direct API (messages snapshot), and VPS Agent SDK (session resume).
+- **Daily budget tracking (VPS)** — Set `DAILY_API_BUDGET` to cap daily spend. Auto-downgrades Opus→Sonnet when budget runs low.
+
+### New Files
+- `src/lib/model-router.ts` — Complexity classifier + tiered model selection
+- `src/lib/agent-session.ts` — Agent SDK wrapper for VPS mode
+
+### Updated
+- `src/lib/claude.ts` — Added `callClaudeStreaming()` with JSONL parsing and progress callbacks
+- `src/bot.ts` — Streaming progress for complex messages, model tier routing
+- `src/vps-gateway.ts` — Tiered routing: Haiku→direct API, Sonnet/Opus→Agent SDK
+- `src/lib/anthropic-processor.ts` — Accepts optional model parameter
+- `.env.example` — Added `USE_AGENT_SDK`, `DAILY_API_BUDGET`
+- `CLAUDE.md` — Documented tiered routing, Agent SDK, streaming progress
+
+### Compatibility
+- Fully backward compatible. No config changes required.
+- Local-only: `git pull && bun install` — new features work automatically.
+- VPS: model routing active immediately. Agent SDK is opt-in.
+
+---
+
 ## v2.0.0 — 2026-02-09
 
 **VPS Gateway + Hybrid Mode**
