@@ -506,10 +506,115 @@ bun run setup:launchd -- --service all
 
 ---
 
+## VPS Hardening & Access Recovery
+
+### SSH Locked Out (fail2ban)
+
+**Symptoms:** SSH connection refused or times out, even though the VPS is running.
+
+**Cause:** fail2ban bans your IP after too many failed SSH attempts (default: 5 failures = 10min ban). This commonly happens when:
+- You have a passphrase-protected SSH key and ssh-agent isn't running
+- Your IP changed (dynamic IP from ISP)
+- You tried multiple keys before the right one
+
+**Recovery via hosting panel:**
+1. Log into your VPS hosting panel (Hostinger, DigitalOcean, etc.)
+2. Open the **web terminal / console** (browser-based SSH)
+3. Check if you're banned:
+   ```bash
+   sudo fail2ban-client status sshd
+   ```
+4. Unban your IP:
+   ```bash
+   sudo fail2ban-client set sshd unbanip YOUR_IP_HERE
+   ```
+5. Find your current IP: visit `https://ifconfig.me` in your browser
+
+**Prevention — whitelist your IP range:**
+
+Create `/etc/fail2ban/jail.local`:
+```ini
+[sshd]
+ignoreip = 127.0.0.1/8 ::1 YOUR_IP_RANGE/24
+maxretry = 10
+bantime = 3600
+```
+
+Then restart: `sudo systemctl restart fail2ban`
+
+**Tip:** Use a `/24` subnet (e.g., `95.91.246.0/24`) instead of a single IP, since residential IPs change frequently.
+
+---
+
+### SSH Key Issues
+
+**Symptoms:** `Permission denied (publickey)` or `Too many authentication failures`
+
+**Common causes:**
+- **Passphrase-protected key**: ssh-agent isn't running or key isn't loaded. Fix: `ssh-add ~/.ssh/your_key` or generate a new key without passphrase for server access
+- **Wrong key**: SSH tries all keys by default. Use `IdentitiesOnly yes` in `~/.ssh/config` to force a specific key
+- **Key not on server**: Your public key isn't in `~/.ssh/authorized_keys` on the VPS
+
+**Recommended SSH config:**
+```
+Host my-vps
+  HostName your-server-ip
+  User ubuntu
+  IdentityFile ~/.ssh/id_ed25519_vps
+  IdentitiesOnly yes
+```
+
+**Generate a new key (no passphrase):**
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vps -N "" -C "my-vps"
+```
+
+Then add the public key to your VPS via the hosting panel's web terminal:
+```bash
+echo "YOUR_PUBLIC_KEY" >> /home/ubuntu/.ssh/authorized_keys
+```
+
+---
+
+### UFW Firewall Rules
+
+The VPS needs these ports open:
+```bash
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP (for webhooks)
+sudo ufw allow 443/tcp   # HTTPS (if using SSL)
+sudo ufw allow 3000/tcp  # Bot gateway (if not behind reverse proxy)
+```
+
+Check status: `sudo ufw status verbose`
+
+---
+
+### API Budget & Cost Management
+
+**How the budget system works:**
+- `DAILY_API_BUDGET` in `.env` sets your daily spend limit (default: $5)
+- When remaining budget drops below $1, Opus requests auto-downgrade to Sonnet
+- When budget hits $0, all requests get a "budget exceeded" message
+- Budget resets at midnight (server time)
+
+**Recommended budgets:**
+| Usage Level | Budget | Notes |
+|------------|--------|-------|
+| Light (5-10 msgs/day) | $5 | Mostly Haiku/Sonnet |
+| Moderate (10-30 msgs/day) | $15 | Mix of all tiers |
+| Heavy (30+ msgs/day, research) | $50+ | Frequent Opus usage |
+
+**Monitor spending:** Check the gateway logs for `[COST]` entries:
+```bash
+grep COST /tmp/gateway.log | tail -20
+```
+
+---
+
 ## VPS-Specific Issues
 
-If you deployed to a VPS (see [Module 11](./11-vps-deployment.md)), these
-additional issues may apply.
+If you deployed to a VPS, these additional issues may apply.
 
 ### Claude Subprocesses Fail on VPS
 

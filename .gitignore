@@ -18,3 +18,4 @@ news-history.json
 last-processed-call.json
 meeting-actions-state.json
 bun.lock
+gobot-master/

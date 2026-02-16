@@ -322,10 +322,15 @@ export async function processIntents(
     if (success) result.goalsAdded.push(goalText);
   }
 
-  // [DONE: text]
+  // [DONE: text] — require minimum 5 chars to prevent vague matches
   const donePattern = /\[DONE:\s*([^\]]+?)\s*\]/gi;
   while ((match = donePattern.exec(text)) !== null) {
     const doneText = match[1].trim();
+    if (doneText.length < 5) {
+      console.warn(`[INTENT] Skipping vague DONE tag: "${doneText}"`);
+      continue;
+    }
+    console.log(`[INTENT] Processing DONE: "${doneText}"`);
     const success = await completeGoal(doneText);
     if (success) result.goalsCompleted.push(doneText);
   }
@@ -346,10 +351,15 @@ export async function processIntents(
     if (success) result.factsRemoved.push(forgetText);
   }
 
-  // [CANCEL: text]
+  // [CANCEL: text] — require minimum 5 chars to prevent vague matches
   const cancelPattern = /\[CANCEL:\s*([^\]]+?)\s*\]/gi;
   while ((match = cancelPattern.exec(text)) !== null) {
     const cancelText = match[1].trim();
+    if (cancelText.length < 5) {
+      console.warn(`[INTENT] Skipping vague CANCEL tag: "${cancelText}"`);
+      continue;
+    }
+    console.log(`[INTENT] Processing CANCEL: "${cancelText}"`);
     const success = await cancelGoal(cancelText);
     if (success) result.goalsCancelled.push(cancelText);
   }

@@ -205,6 +205,12 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
 }
 
 // ============================================================
+// PHONE CALL TRANSCRIPT DEDUPLICATION
+// ============================================================
+
+const processedCallIds = new Set<string>();
+
+// ============================================================
 // PHONE CALL TRANSCRIPT POLLING (fire-and-forget)
 // ============================================================
 
@@ -224,6 +230,12 @@ function startCallTranscriptPolling(
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
       try {
+        // Skip if already processed (webhook may have handled it)
+        if (processedCallIds.has(conversationId)) {
+          console.log(`Transcript for ${conversationId} already processed (by webhook), stopping poll`);
+          return;
+        }
+
         const transcript = await getCallTranscript(conversationId);
         if (!transcript) {
           if (attempt % 6 === 0) {
@@ -233,6 +245,13 @@ function startCallTranscriptPolling(
           }
           continue;
         }
+
+        // Mark as processed before doing anything
+        if (processedCallIds.has(conversationId)) {
+          console.log(`Transcript for ${conversationId} already processed (race), skipping`);
+          return;
+        }
+        processedCallIds.add(conversationId);
 
         console.log(
           `Transcript received for ${conversationId} after ${attempt} polls`
@@ -1115,6 +1134,17 @@ const server = Bun.serve({
         );
 
         if (payload.status === "done" && payload.transcript) {
+          // Dedup: skip if already processed by polling
+          if (payload.conversation_id && processedCallIds.has(payload.conversation_id)) {
+            console.log(`Webhook transcript for ${payload.conversation_id} already processed (by polling), skipping`);
+            return new Response(JSON.stringify({ ok: true, skipped: "already_processed" }), {
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+          if (payload.conversation_id) {
+            processedCallIds.add(payload.conversation_id);
+          }
+
           const botName = BOT_NAME;
           const transcriptText = payload.transcript
             .map(

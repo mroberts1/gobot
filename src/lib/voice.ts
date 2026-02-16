@@ -83,16 +83,29 @@ export async function initiatePhoneCall(
   try {
     console.log("📞 Initiating phone call...");
 
-    // Get context for the call
-    const memoryContext = await supabase.getMemoryContext();
-    const chatId = process.env.TELEGRAM_USER_ID || "";
-    const recentMessages = await supabase.getRecentMessages(chatId, 10);
-    const conversationHistory = recentMessages
-      .map((m) => {
-        const role = m.role === "user" ? userName : "Bot";
-        return `${role}: ${m.content.substring(0, 200)}`;
-      })
-      .join("\n");
+    // Get context for the call (with fallbacks for empty data)
+    let memoryContext = "";
+    let conversationHistory = "";
+    try {
+      memoryContext = await supabase.getMemoryContext();
+      const chatId = process.env.TELEGRAM_USER_ID || "";
+      const recentMessages = await supabase.getRecentMessages(chatId, 10);
+      conversationHistory = recentMessages
+        .map((m) => {
+          const role = m.role === "user" ? userName : "Bot";
+          return `${role}: ${m.content.substring(0, 200)}`;
+        })
+        .join("\n");
+    } catch (err) {
+      console.error("Failed to load call context from Supabase:", err);
+    }
+
+    if (!memoryContext) {
+      memoryContext = "No stored memory available. Start fresh.";
+    }
+    if (!conversationHistory) {
+      conversationHistory = "No recent messages. This is a new conversation.";
+    }
 
     const berlinTime = new Date().toLocaleString("en-US", {
       timeZone: process.env.USER_TIMEZONE || "UTC",
@@ -346,6 +359,13 @@ export async function buildVoiceAgentContext(): Promise<Record<string, any>> {
   } catch (err) {
     console.error("Voice context fetch error:", err);
   }
+
+  // Ensure ElevenLabs agent always has usable context
+  if (!memory) memory = "No stored memory available. Start fresh.";
+  if (!recentChat) recentChat = "No recent messages. This is a new conversation.";
+  if (!goals) goals = "No active goals set.";
+
+  console.log(`Voice context: memory=${memory.length}chars, chat=${recentChat.length}chars, goals=${goals.length}chars`);
 
   return {
     user_name: userName,
