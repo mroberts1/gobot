@@ -144,23 +144,21 @@ directly is instant and avoids the overhead.
 
 ## Same Code on VPS — How It Works
 
-Claude Code CLI accepts an `ANTHROPIC_API_KEY` environment variable. When set,
-it uses the Anthropic API directly (pay-per-token) instead of requiring a
-browser-based subscription login. But it still loads **all** Claude Code features:
+Claude Code CLI accepts an `ANTHROPIC_API_KEY` environment variable. When set, it uses the Anthropic API directly (pay-per-token). Without it, Claude Code uses your subscription authentication. Both modes load all Claude Code features:
 
 ```
 Local Machine                        VPS
 ┌────────────────────┐              ┌────────────────────┐
 │ Claude Code CLI    │              │ Claude Code CLI    │
 │ + subscription     │              │ + ANTHROPIC_API_KEY│
-│                    │              │                    │
+│   auth             │              │                    │
 │ ✅ MCP Servers     │              │ ✅ MCP Servers     │
 │ ✅ Skills          │              │ ✅ Skills          │
 │ ✅ Hooks           │              │ ✅ Hooks           │
 │ ✅ CLAUDE.md       │              │ ✅ CLAUDE.md       │
 │ ✅ Built-in Tools  │              │ ✅ Built-in Tools  │
 │                    │              │                    │
-│ Cost: $0/message   │              │ Cost: ~$0.01/msg   │
+│ Auth: subscription │              │ Auth: API key      │
 └────────────────────┘              └────────────────────┘
          │                                   │
          └──────────┬────────────────────────┘
@@ -489,3 +487,5 @@ go-telegram-bot/
 ---
 
 **Next document:** [Troubleshooting](./troubleshooting.md)
+
+<!-- Updated February 19, 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement. -->

@@ -5,7 +5,7 @@
  *
  * Two flows depending on processing mode:
  *
- * MAC (Claude Code / Max subscription):
+ * MAC (Claude Code CLI / subscription auth):
  * 1. Image received → saved locally + uploaded to Supabase Storage
  * 2. File path passed to Claude Code (Opus reads image natively)
  * 3. AFTER response: parse [ASSET_DESC] tag → update description + embedding
@@ -606,3 +606,5 @@ function getTimeAgo(dateString: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return `${Math.floor(diffDays / 7)}w ago`;
 }
+
+// Updated February 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement.

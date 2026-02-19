@@ -2,8 +2,8 @@
  * VPS Gateway — Telegram Webhook + Smart Routing + Voice + Human-in-the-Loop
  *
  * Always-on entry point for the Telegram bot on a VPS.
- * Routes to local machine (subscription, free) when alive, or processes
- * on VPS via direct Anthropic API (pay-per-token) when local is down.
+ * Routes to local machine (Claude Code CLI, subscription auth) when alive,
+ * or processes on VPS via direct Anthropic API (pay-per-token) when local is down.
  *
  * Run: bun run src/vps-gateway.ts
  */
@@ -1321,3 +1321,5 @@ VPS Gateway started!
 `);
 
 supabase.testConnection().catch(() => {});
+
+// Updated February 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement.

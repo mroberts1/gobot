@@ -4,46 +4,32 @@
 
 ## Deployment & Costs
 
-### Can I run the bot 24/7 using my Claude subscription instead of paying for API tokens?
+### How do the three deployment modes handle authentication?
 
-**Technically possible, but not recommended** — especially if you're running this for clients or as a business.
+GoBot supports three deployment modes. All three are compliant with Anthropic's Terms of Service.
 
-**Why subscription doesn't work well for always-on bots:**
+**Local mode** uses your Claude Code CLI directly. You authenticate Claude Code on your machine (subscription login), and GoBot spawns `claude -p` subprocesses. This works while your machine is on.
 
-- Subscription requires browser-based OAuth login. On a headless server, there's no browser — sessions expire and need manual re-authentication.
-- Even the Max plan has rate limits that can throttle your bot during heavy use.
-- Running automated bots commercially on a subscription may violate Anthropic's Terms of Service.
-- Managing auth sessions across multiple machines or clients becomes an ops nightmare.
+**VPS mode** uses the Anthropic API with your own `ANTHROPIC_API_KEY` from console.anthropic.com. Pay-per-token. Works 24/7 on a headless server.
 
-**The API approach is simpler and often cheaper:**
+**Hybrid mode** (recommended) combines both: VPS with API key catches messages 24/7. When your local machine is awake, it forwards there — your Claude Code CLI handles it via subscription. When your machine sleeps, VPS processes with API tokens.
 
-| | Subscription | API (Sonnet) |
-|---|---|---|
-| **Cost** | $20-100/mo fixed | ~$5-20/mo for typical bot usage |
-| **Auth** | Browser OAuth (fragile on servers) | API key (set and forget) |
-| **Rate limits** | Plan-based throttling | Pay for what you use |
-| **Headless servers** | Requires workarounds | Works natively |
-| **Multi-client** | One subscription per person | One API key per client, clean isolation |
+| | Local | VPS | Hybrid |
+|---|---|---|---|
+| **Auth** | Claude Code CLI (subscription) | API key (pay-per-token) | Both |
+| **Availability** | While machine is on | 24/7 | 24/7 |
+| **Cost** | Pro ($20/mo) to start, Max ($100-200/mo) for full power | VPS (~$5/mo) + API costs vary by usage and model | VPS + API costs + subscription |
+| **Best for** | Personal use, testing | Always-on reliability | Best of both worlds |
 
-For a bot handling 50-100 messages per day, API costs typically run **$5-20/month** — comparable to or cheaper than a subscription.
+**A note on Anthropic's January 2026 ToS enforcement:** Anthropic cracked down on third-party tools that were extracting OAuth tokens from Claude subscriptions and using them in their own API clients. GoBot does not do this — it calls `claude -p`, which is Claude Code itself. Your Claude Code handles its own authentication. GoBot never touches, extracts, or forwards any OAuth tokens.
 
 ---
 
-### What about running macOS or Windows VMs to use a subscription?
+### Do I need a VM to use my subscription on a server?
 
-This comes up when people want to avoid API costs by running a full desktop OS with a logged-in Claude subscription.
+No. For always-on deployment, use VPS mode with an API key — it's simpler, cheaper, and more reliable than running a desktop OS on a server. API costs vary based on usage and model selection — GoBot uses smart routing (Haiku for simple, Sonnet for medium, Opus for complex) to keep costs down. You can also use OpenRouter as a fallback (which supports hundreds of models) or even install a local model via Ollama on your VPS for fully self-hosted operation (requires more VPS resources/storage).
 
-**macOS VMs:**
-- Apple's license only allows macOS VMs on Apple hardware.
-- Options: Mac Mini colocation (MacStadium ~$50/mo), AWS EC2 Mac instances.
-- You still need to manage OAuth sessions and re-authenticate when they expire.
-
-**Windows VMs:**
-- Can run anywhere, Claude Code works on Windows.
-- Needs a desktop environment kept alive for OAuth.
-- Clunky and fragile compared to a simple API key on a Linux VPS.
-
-**Bottom line:** The VM + subscription approach costs more and creates more problems than a $5/mo VPS + API key. The only scenario where it makes sense is if you're already running the bot on your personal desktop and want it on while your machine is awake — which is exactly what local mode does.
+If you want your local machine to handle messages while it's awake (saving on API costs), use hybrid mode.
 
 ---
 
@@ -54,9 +40,9 @@ Use the **VPS + API key** approach. For each client:
 1. Provision a VPS (~$5/mo per client)
 2. Set up an Anthropic API key (their own or yours)
 3. Deploy gobot with their profile, agents, and integrations
-4. API cost: ~$10-20/mo per client depending on usage
+4. API costs vary by usage and model selection — smart routing keeps costs manageable
 
-Your margin is the difference between what you charge and the ~$15-25/mo infrastructure cost per client. This is clean, scalable, and doesn't require any hacks with subscriptions or VMs.
+Your margin is the difference between what you charge and the per-client infrastructure cost (VPS + API usage). This is clean, scalable, and doesn't require any hacks with subscriptions or VMs.
 
 ---
 
@@ -64,11 +50,11 @@ Your margin is the difference between what you charge and the ~$15-25/mo infrast
 
 | Mode | How it works | Cost | Best for |
 |------|-------------|------|----------|
-| **Local** | Runs on your desktop with Claude Code CLI | Free with subscription | Personal use, testing |
-| **VPS** | Runs on a cloud server with API key | ~$5/mo VPS + API tokens | 24/7 reliability |
-| **Hybrid** | VPS always on, forwards to local when your machine is awake | VPS + subscription | Saving on API costs |
+| **Local** | Runs on your machine with Claude Code CLI | Pro ($20/mo) to start, Max ($100-200/mo) for full power | Personal use, testing |
+| **VPS** | Runs on a cloud server with API key | ~$5/mo VPS + API costs vary by usage | 24/7 reliability |
+| **Hybrid** | VPS always on, forwards to local when awake | VPS + API costs + subscription | Saving on API costs |
 
-**Hybrid** gives you the best of both worlds: your local machine handles messages for free when it's awake, and the VPS takes over with API tokens when it's not.
+**Hybrid** gives you the best of both worlds: your local machine handles messages via your Claude Code CLI (subscription) when it's awake, and the VPS takes over with API tokens when it's not.
 
 ---
 
@@ -116,8 +102,18 @@ This happens when the Claude subprocess runs without full permissions. The bot n
 
 ---
 
+---
+
+### GoBot only works with Telegram?
+
+GoBot starts with Telegram as the primary interface, but it can be connected to other platforms. Community members have already connected GoBot to **Google Chat, Microsoft Teams, Discord, WhatsApp, Slack**, and more. The core AI processing, memory, and agent logic are platform-agnostic — Telegram is just the default messaging layer.
+
+---
+
 ## More Help
 
 - [Architecture Deep Dive](./architecture.md)
 - [Troubleshooting Guide](./troubleshooting.md)
 - [Autonomee Community](https://skool.com/autonomee)
+
+<!-- Updated February 19, 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement. -->

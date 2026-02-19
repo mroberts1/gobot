@@ -7,9 +7,9 @@ An always-on Telegram agent powered by Claude with multi-agent routing, proactiv
 ## What It Does
 
 ```
-                          ┌── Local (Claude Code + subscription = free)
+                          ┌── Local (Claude Code CLI + subscription)
 You ──▶ Telegram ──▶ Bot ─┤
-                          └── VPS  (Claude Code + API key = pay-per-token)
+                          └── VPS  (Anthropic API + API key)
                                 │
                                 ├── Same code, same features everywhere:
                                 │   MCP Servers, Skills, Hooks, CLAUDE.md
@@ -17,7 +17,7 @@ You ──▶ Telegram ──▶ Bot ─┤
                                 └── Supabase (shared memory, goals, history)
 ```
 
-- **Relay**: Send messages on Telegram, get Claude responses back
+- **Relay**: Send messages on Telegram, get Claude responses back (and connect from Google Chat, Microsoft Teams, Discord, WhatsApp, Slack, and more)
 - **Multi-Agent**: Route messages to specialized agents via Telegram forum topics
 - **Memory**: Persistent facts, goals, and conversation history via Supabase
 - **Image Storage**: Photos stored persistently with AI-generated descriptions, tags, and semantic search
@@ -60,13 +60,13 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 | Mode | How It Works | Cost |
 |------|-------------|------|
-| **Local Only** | Runs on your desktop, uses Claude Code CLI | Free with Claude subscription ($20/mo) |
-| **VPS** (recommended for 24/7) | Same code on VPS, Claude Code CLI + API key | VPS (~$5/mo) + API tokens |
-| **Hybrid** | VPS always on, forwards to local when awake to save on API tokens | VPS cost + subscription |
+| **Local** | Runs on your machine using Claude Code CLI | Claude Pro subscription to get started ($20/mo), Max for full power ($100-200/mo) |
+| **VPS** (24/7) | Runs on a cloud server using Anthropic API | VPS (~$5/mo) + API costs vary by usage and model selection |
+| **Hybrid** (recommended) | VPS always on, forwards to local when your machine is awake | VPS + API costs + subscription |
 
 ### Same Code, Full Power — Everywhere
 
-Claude Code CLI works with an `ANTHROPIC_API_KEY` environment variable. When set, it uses the Anthropic API (pay-per-token) instead of a subscription login. But you still get **all** Claude Code features: MCP servers, skills, hooks, CLAUDE.md, built-in tools.
+Claude Code CLI works with an `ANTHROPIC_API_KEY` environment variable. When set, it uses the Anthropic API (pay-per-token). Without it, Claude Code uses your subscription authentication. Both modes give you **all** Claude Code features: MCP servers, skills, hooks, CLAUDE.md, built-in tools.
 
 This means: clone the repo on your VPS, install Claude Code, set your API key, and run `bun run start`. Same experience as your laptop. One codebase everywhere.
 
@@ -74,7 +74,7 @@ This means: clone the repo on your VPS, install Claude Code, set your API key, a
 
 Your laptop sleeps. Your VPS doesn't. With hybrid mode:
 - Messages are always processed, even at 3am
-- When your local machine is awake, it handles everything for free with subscription
+- When your local machine is awake, it handles everything via your Claude Code CLI (subscription)
 - When it sleeps, VPS takes over with API key (pay-per-token)
 - Both have full Claude Code power — MCP servers, skills, hooks, everything
 
@@ -168,7 +168,7 @@ Claude Code reads the `CLAUDE.md` file and walks you through a guided conversati
 │ Telegram  │     │  VPS (always on, Claude Code + API key)  │
 │           │────▶│                                           │
 │           │◀────│  Is local machine alive?                  │
-└───────────┘     │  ├── YES → forward to local (free)       │
+└───────────┘     │  ├── YES → forward to local (subscription)│
                   │  └── NO  → process on VPS (API tokens)   │
                   │                                           │
                   │  Both have full Claude Code power:        │
@@ -234,3 +234,5 @@ MIT
 ---
 
 Built by [Goda Go](https://youtube.com/@GodaGo)
+
+<!-- Updated February 19, 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement. -->

@@ -40,7 +40,7 @@ git push origin master
 
 An always-on Telegram agent that:
 - Relays your messages to Claude and sends back responses
-- **Two processing engines**: Claude Code CLI (local, free with subscription) or Anthropic API (VPS, pay-per-token)
+- **Two processing engines**: Claude Code CLI (local, uses your subscription) or Anthropic API (VPS, pay-per-token). Both are fully compliant with Anthropic's Terms of Service.
 - **Hybrid mode**: VPS always on, forwards to local when your machine is awake
 - Runs multiple specialized AI agents (Research, Content, Finance, Strategy, Critic)
 - **Extensible via MCP**: Connect any MCP servers you use (email, calendar, project management, etc.)
@@ -402,13 +402,13 @@ Deploy the bot to a cloud VPS so it runs 24/7 without depending on your local ma
 
 | Mode | How It Works | Cost |
 |------|-------------|------|
-| **Local Only** | Runs on your desktop, uses Claude Code CLI | Free with Claude subscription |
-| **VPS** (recommended for 24/7) | Same `bot.ts` on VPS with Claude Code CLI + `ANTHROPIC_API_KEY` | VPS (~$5/mo) + API tokens |
-| **Hybrid** | VPS always on, forwards to local when awake to save on API tokens | VPS cost + subscription |
+| **Local Only** | Runs on your machine using Claude Code CLI | Claude Pro to get started ($20/mo), Max for full power ($100-200/mo) |
+| **VPS** (recommended for 24/7) | Same code on VPS, Claude Code CLI + API key | VPS (~$5/mo) + API costs vary by usage and model selection |
+| **Hybrid** | VPS always on, forwards to local when awake | VPS + API costs + subscription |
 
 ### How VPS Works — Same Code, Full Power
 
-The key insight: **Claude Code CLI works with an `ANTHROPIC_API_KEY` environment variable.** When set, it uses the Anthropic API (pay-per-token) instead of requiring a browser-based subscription login. But you still get ALL Claude Code features:
+The key insight: **Claude Code CLI works with an `ANTHROPIC_API_KEY` environment variable.** When set, it uses the Anthropic API (pay-per-token). Without it, Claude Code uses your subscription authentication. Both approaches are compliant — GoBot calls `claude -p` (Claude Code's official subprocess mode), not a third-party API client. You still get ALL Claude Code features:
 
 - **MCP servers** — whatever you've configured (email, calendar, databases, etc.)
 - **Skills** — Your custom Claude Code skills (presentations, research, etc.)
@@ -428,7 +428,7 @@ All processing paths now include intelligent model routing that classifies messa
 | **Sonnet** | claude-sonnet-4-5 | Medium tasks, unclear complexity | 5-15s |
 | **Opus** | claude-opus-4-6 | Research, analysis, strategy, long writing | 15-60s |
 
-- **Mac mode:** Routing is UX-only — all messages use Claude Code subprocess (free subscription). Sonnet/Opus tier uses **streaming subprocess** (`--output-format stream-json`) that sends live progress updates to Telegram: which tools are being used, first snippet of Claude's plan. Haiku tier uses standard subprocess (instant response, no progress needed).
+- **Mac mode:** Routing is UX-only — all messages use Claude Code subprocess (subscription). Sonnet/Opus tier uses **streaming subprocess** (`--output-format stream-json`) that sends live progress updates to Telegram: which tools are being used, first snippet of Claude's plan. Haiku tier uses standard subprocess (instant response, no progress needed).
 - **VPS mode:** Routing selects the actual model. Haiku uses direct API (fast), Sonnet/Opus use Agent SDK when enabled.
 - **Budget tracking:** Daily cost limit (`DAILY_API_BUDGET`, default $5). Auto-downgrades Opus→Sonnet when budget runs low.
 
@@ -453,7 +453,7 @@ When Agent SDK is disabled (or for Haiku tier), the VPS gateway falls back to di
 
 ### Hybrid Mode
 
-VPS catches messages 24/7. When your local machine is awake, forward messages there — local uses Claude Code with your subscription (free), keeping API costs down. When your machine sleeps, VPS handles it with its own Claude Code + API key.
+VPS catches messages 24/7. When your local machine is awake, forward messages there — local uses Claude Code with your subscription, keeping API costs down. When your machine sleeps, VPS handles it with its own Claude Code + API key.
 
 ### What you need:
 1. **A VPS** — Any provider works. [Hostinger](https://hostinger.com?REFERRALCODE=1GODA06) is recommended (promo code **GODAGO** for discount)
@@ -471,7 +471,7 @@ VPS catches messages 24/7. When your local machine is awake, forward messages th
 
 ### VPS .env setup:
 ```bash
-# Required for VPS — Claude Code uses this instead of subscription
+# Required for VPS — enables pay-per-token API access (no subscription login needed on headless servers)
 ANTHROPIC_API_KEY=sk-ant-api03-your_key_here
 
 # Same credentials as local
@@ -668,3 +668,5 @@ See `docs/troubleshooting.md` for common issues and fixes.
 - Verify your keys in `.env` match the Supabase dashboard
 - Ensure the `service_role` key is used (not just `anon`) for write operations
 - Check that `db/schema.sql` was fully applied (all tables exist)
+
+<!-- Updated February 19, 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement. -->

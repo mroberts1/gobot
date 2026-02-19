@@ -234,7 +234,7 @@
                         <tr>
                             <td><strong>Local Only</strong></td>
                             <td>Runs on your desktop with Claude Code CLI</td>
-                            <td class="success">Free with Claude sub ($20/mo)</td>
+                            <td class="success">Claude Code CLI (subscription)</td>
                         </tr>
                         <tr>
                             <td><strong>VPS</strong> ⭐</td>
@@ -244,7 +244,7 @@
                         <tr>
                             <td><strong>Hybrid</strong></td>
                             <td>VPS forwards to local when awake (free), uses API when sleeping</td>
-                            <td>VPS cost + subscription</td>
+                            <td>VPS + API key + subscription</td>
                         </tr>
                     </tbody>
                 </table>
@@ -385,7 +385,7 @@ bun run uninstall          # Remove all services</code></pre>
                     <p style="margin-bottom: 20px;">Your laptop sleeps. Your VPS doesn't.</p>
                     <ul>
                         <li>Messages are <span class="highlight">always processed</span>, even at 3am</li>
-                        <li>When your local machine is awake, it handles everything <span class="success">for free</span> with subscription</li>
+                        <li>When your local machine is awake, it handles everything via your Claude Code CLI (subscription)</li>
                         <li>When it sleeps, VPS takes over with API key (pay-per-token)</li>
                         <li>Both have <span class="highlight">full Claude Code power</span> — MCP servers, skills, hooks, everything</li>
                     </ul>
@@ -394,7 +394,7 @@ bun run uninstall          # Remove all services</code></pre>
 │ Telegram  │     │  VPS (always on, Claude Code + API)  │
 │           │────▶│                                       │
 │           │◀────│  Is local machine alive?              │
-└───────────┘     │  ├── YES → forward (free)            │
+└───────────┘     │  ├── YES → forward (subscription)    │
                   │  └── NO  → process (API tokens)      │
                   └──────────────┬───────────────────────┘
                                  │
@@ -461,5 +461,6 @@ bun run uninstall          # Remove all services</code></pre>
             maxScale: 2.0
         });
     </script>
+<!-- Updated February 19, 2026: Clarified deployment modes and authentication following Anthropic's January 2026 ToS enforcement. -->
 </body>
 </html>
