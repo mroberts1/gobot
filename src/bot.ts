@@ -19,6 +19,26 @@ import { createWriteStream, existsSync } from "fs";
 
 import { loadEnv } from "./lib/env";
 import { sanitizeForTelegram, sendResponse, createTypingIndicator } from "./lib/telegram";
+import {
+  isReplicateEnabled,
+  generateImage,
+  generateVideo,
+  downloadResult,
+  buildModelKeyboard,
+  parseReplicateCallback,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+} from "./lib/replicate";
+import {
+  isFalEnabled,
+  generateFalImage,
+  generateFalVideo,
+  downloadFalResult,
+  buildFalModelKeyboard,
+  parseFalCallback,
+  FAL_IMAGE_MODELS,
+  FAL_VIDEO_MODELS,
+} from "./lib/fal";
 import { callClaude as callClaudeSubprocess, callClaudeStreaming, isClaudeErrorResponse } from "./lib/claude";
 import {
   processIntents,
@@ -507,6 +527,52 @@ async function handleTextMessage(ctx: Context): Promise<void> {
     return;
   }
 
+  // ----- Image Generation (/imagine) -----
+
+  if (lowerText.startsWith("/imagine ") || lowerText.startsWith("/imagine\n")) {
+    const prompt = text.slice("/imagine".length).trim();
+    if (!prompt) {
+      await ctx.reply("Usage: /imagine <prompt>");
+      return;
+    }
+    const imgKeyboard = [
+      ...( isReplicateEnabled() ? buildModelKeyboard(IMAGE_MODELS, "img", prompt) : []),
+      ...( isFalEnabled()        ? buildFalModelKeyboard(FAL_IMAGE_MODELS, "fimg", prompt) : []),
+    ];
+    if (imgKeyboard.length === 0) {
+      await ctx.reply("No image generation providers configured. Add REPLICATE_API_TOKEN or FAL_KEY to .env");
+      return;
+    }
+    await ctx.reply(`*${prompt}*\n\nPick a model:`, {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard: imgKeyboard },
+    });
+    return;
+  }
+
+  // ----- Video Generation (/video) -----
+
+  if (lowerText.startsWith("/video ") || lowerText.startsWith("/video\n")) {
+    const prompt = text.slice("/video".length).trim();
+    if (!prompt) {
+      await ctx.reply("Usage: /video <prompt>");
+      return;
+    }
+    const vidKeyboard = [
+      ...( isReplicateEnabled() ? buildModelKeyboard(VIDEO_MODELS, "vid", prompt) : []),
+      ...( isFalEnabled()        ? buildFalModelKeyboard(FAL_VIDEO_MODELS, "fvid", prompt) : []),
+    ];
+    if (vidKeyboard.length === 0) {
+      await ctx.reply("No video generation providers configured. Add REPLICATE_API_TOKEN or FAL_KEY to .env");
+      return;
+    }
+    await ctx.reply(`*${prompt}*\n\nPick a model:`, {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard: vidKeyboard },
+    });
+    return;
+  }
+
   // ----- Default: Claude Processing -----
 
   // Determine agent from topic (if forum mode)
@@ -804,6 +870,120 @@ async function handleCallbackQuery(ctx: Context): Promise<void> {
 
   // Acknowledge the button press immediately
   await ctx.answerCallbackQuery().catch(() => {});
+
+  // ----- Replicate: Image model selected -----
+  const imgCallback = parseReplicateCallback(data, "img");
+  if (imgCallback) {
+    const { modelKey, prompt } = imgCallback;
+    const preset = IMAGE_MODELS[modelKey];
+    if (!preset) {
+      await ctx.editMessageText("Unknown model.").catch(() => {});
+      return;
+    }
+    await ctx.editMessageText(`Generating image with *${preset.label}*...\n\n_${prompt}_`, {
+      parse_mode: "Markdown",
+    }).catch(() => {});
+    try {
+      const result = await generateImage(prompt, modelKey);
+      const buf = await downloadResult(result.url);
+      const ext = result.url.split(".").pop()?.split("?")[0] || "webp";
+      const chatId = String(ctx.chat?.id || "");
+      await ctx.api.sendPhoto(chatId, new InputFile(buf, `image.${ext}`), {
+        caption: `${prompt}\n_${preset.label} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+      await ctx.deleteMessage().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.editMessageText(`Image generation failed: ${msg}`).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- Replicate: Video model selected -----
+  const vidCallback = parseReplicateCallback(data, "vid");
+  if (vidCallback) {
+    const { modelKey, prompt } = vidCallback;
+    const preset = VIDEO_MODELS[modelKey];
+    if (!preset) {
+      await ctx.editMessageText("Unknown model.").catch(() => {});
+      return;
+    }
+    await ctx.editMessageText(`Generating video with *${preset.label}*... (30–180s)\n\n_${prompt}_`, {
+      parse_mode: "Markdown",
+    }).catch(() => {});
+    try {
+      const result = await generateVideo(prompt, modelKey);
+      const buf = await downloadResult(result.url);
+      const chatId = String(ctx.chat?.id || "");
+      await ctx.api.sendVideo(chatId, new InputFile(buf, "video.mp4"), {
+        caption: `${prompt}\n_${preset.label} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+      await ctx.deleteMessage().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.editMessageText(`Video generation failed: ${msg}`).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- fal.ai: Image model selected -----
+  const falImgCallback = parseFalCallback(data, "fimg");
+  if (falImgCallback) {
+    const { modelKey, prompt } = falImgCallback;
+    const preset = FAL_IMAGE_MODELS[modelKey];
+    if (!preset) {
+      await ctx.editMessageText("Unknown model.").catch(() => {});
+      return;
+    }
+    await ctx.editMessageText(`Generating image with *${preset.label}*...\n\n_${prompt}_`, {
+      parse_mode: "Markdown",
+    }).catch(() => {});
+    try {
+      const result = await generateFalImage(prompt, modelKey);
+      const buf = await downloadFalResult(result.url);
+      const ext = result.url.split(".").pop()?.split("?")[0] || "jpg";
+      const chatId = String(ctx.chat?.id || "");
+      await ctx.api.sendPhoto(chatId, new InputFile(buf, `image.${ext}`), {
+        caption: `${prompt}\n_${preset.label} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+      await ctx.deleteMessage().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.editMessageText(`Image generation failed: ${msg}`).catch(() => {});
+    }
+    return;
+  }
+
+  // ----- fal.ai: Video model selected -----
+  const falVidCallback = parseFalCallback(data, "fvid");
+  if (falVidCallback) {
+    const { modelKey, prompt } = falVidCallback;
+    const preset = FAL_VIDEO_MODELS[modelKey];
+    if (!preset) {
+      await ctx.editMessageText("Unknown model.").catch(() => {});
+      return;
+    }
+    await ctx.editMessageText(`Generating video with *${preset.label}*... (30–360s)\n\n_${prompt}_`, {
+      parse_mode: "Markdown",
+    }).catch(() => {});
+    try {
+      const result = await generateFalVideo(prompt, modelKey);
+      const buf = await downloadFalResult(result.url);
+      const chatId = String(ctx.chat?.id || "");
+      await ctx.api.sendVideo(chatId, new InputFile(buf, "video.mp4"), {
+        caption: `${prompt}\n_${preset.label} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+      await ctx.deleteMessage().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.editMessageText(`Video generation failed: ${msg}`).catch(() => {});
+    }
+    return;
+  }
 
   if (!data.startsWith("atask:")) return;
 
@@ -1560,9 +1740,14 @@ await sbLog("info", "bot", "Bot started", {
   timezone: TIMEZONE,
 });
 
-// Start polling
-bot.start({
-  onStart: (botInfo) => {
-    console.log(`Bot online as @${botInfo.username}`);
-  },
-});
+// Start polling (skip in hybrid local mode — VPS webhook handles incoming messages)
+const NODE_ID = process.env.NODE_ID || "local";
+if (NODE_ID === "local") {
+  console.log("Mode:        hybrid local (polling disabled — VPS forwards via /process)");
+} else {
+  bot.start({
+    onStart: (botInfo) => {
+      console.log(`Bot online as @${botInfo.username}`);
+    },
+  });
+}
