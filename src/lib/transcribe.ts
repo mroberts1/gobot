@@ -34,7 +34,7 @@ export async function transcribeAudio(filePath: string): Promise<string> {
     const mimeType = mimeMap[ext] || "audio/ogg";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -59,10 +59,9 @@ export async function transcribeAudio(filePath: string): Promise<string> {
     );
 
     const result = await response.json();
-    return (
-      result.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "[Could not transcribe audio]"
-    );
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) console.error("Gemini transcription response:", JSON.stringify(result).substring(0, 500));
+    return text || "[Could not transcribe audio]";
   } catch (error) {
     console.error("Transcription error:", error);
     return "[Transcription failed]";
@@ -85,7 +84,7 @@ export async function transcribeAudioBuffer(
     const base64Audio = audioBuffer.toString("base64");
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,10 +109,9 @@ export async function transcribeAudioBuffer(
     );
 
     const result = await response.json();
-    return (
-      result.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "[Could not transcribe audio]"
-    );
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) console.error("Gemini buffer transcription response:", JSON.stringify(result).substring(0, 500));
+    return text || "[Could not transcribe audio]";
   } catch (error) {
     console.error("Buffer transcription error:", error);
     return "[Transcription failed]";
