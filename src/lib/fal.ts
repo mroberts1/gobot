@@ -41,13 +41,6 @@ export const FAL_IMAGE_MODELS: Record<string, FalModelPreset> = {
     inputFn: (prompt) => ({ prompt }),
     maxWaitMs: 120_000,
   },
-  "fal-nano-banana": {
-    label: "Nano Banana",
-    modelId: "fal-ai/nano-banana",
-    type: "image",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 60_000,
-  },
   "fal-imagen4": {
     label: "Imagen 4",
     modelId: "fal-ai/imagen4/preview",
