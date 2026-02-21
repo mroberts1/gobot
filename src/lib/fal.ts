@@ -27,20 +27,6 @@ export interface FalModelPreset {
  * Image models — add/remove entries here to change what appears in /imagine.
  */
 export const FAL_IMAGE_MODELS: Record<string, FalModelPreset> = {
-  "fal-flux-2": {
-    label: "Flux 2",
-    modelId: "fal-ai/flux-2",
-    type: "image",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 60_000,
-  },
-  "fal-flux-2-max": {
-    label: "Flux 2 Max",
-    modelId: "fal-ai/flux-2-max",
-    type: "image",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 120_000,
-  },
   "fal-imagen4": {
     label: "Imagen 4",
     modelId: "fal-ai/imagen4/preview",
