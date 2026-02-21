@@ -108,8 +108,16 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     inputFn: (prompt) => ({ prompt, num_frames: 121 }),
     maxWaitMs: 180_000,
   },
+  "veo-3": {
+    label: "Veo 3 🔊",
+    owner: "google",
+    name: "veo-3",
+    type: "video",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 360_000,
+  },
   "veo-3.1": {
-    label: "Veo 3.1",
+    label: "Veo 3.1 🔊",
     owner: "google",
     name: "veo-3.1",
     type: "video",
@@ -117,12 +125,20 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     maxWaitMs: 360_000,
   },
   "veo-3.1-fast": {
-    label: "Veo 3.1 Fast",
+    label: "Veo 3.1 Fast 🔊",
     owner: "google",
     name: "veo-3.1-fast",
     type: "video",
     inputFn: (prompt) => ({ prompt }),
     maxWaitMs: 300_000,
+  },
+  "kling-v3": {
+    label: "Kling v3 Pro 🔊",
+    owner: "kwaivgi",
+    name: "kling-v3-video",
+    type: "video",
+    inputFn: (prompt) => ({ prompt, mode: "pro", duration: 5, generate_audio: true }),
+    maxWaitMs: 360_000,
   },
 };
 

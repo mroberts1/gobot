@@ -33,34 +33,6 @@ export const FAL_IMAGE_MODELS: Record<string, FalModelPreset> = {
  * Video models — add/remove entries here to change what appears in /video.
  */
 export const FAL_VIDEO_MODELS: Record<string, FalModelPreset> = {
-  "fal-veo3.1": {
-    label: "Veo 3.1 🔊",
-    modelId: "fal-ai/veo3.1",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 360_000,
-  },
-  "fal-veo3": {
-    label: "Veo 3 🔊",
-    modelId: "fal-ai/veo3",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 360_000,
-  },
-  "fal-kling3": {
-    label: "Kling 3 Pro",
-    modelId: "fal-ai/kling-video/v3/pro/text-to-video",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 300_000,
-  },
-  "fal-seedance-pro": {
-    label: "Seedance Pro",
-    modelId: "fal-ai/bytedance/seedance/v1/pro/text-to-video",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 300_000,
-  },
 };
 
 const POLL_INTERVAL_MS = 5_000;
