@@ -625,13 +625,14 @@ bot.command("imagine", async (ctx) => {
     await ctx.reply("Usage: /imagine <description>");
     return;
   }
-  if (!isReplicateEnabled() && !isFalEnabled()) {
-    await ctx.reply("Image generation is not configured (REPLICATE_API_TOKEN or FAL_KEY needed).");
+  if (!isReplicateEnabled() && !isFalEnabled() && !isHfEnabled()) {
+    await ctx.reply("Image generation is not configured.");
     return;
   }
   const rows = [
     ...(isReplicateEnabled() ? buildModelKeyboard(IMAGE_MODELS, "img", prompt) : []),
     ...(isFalEnabled() ? buildFalModelKeyboard(FAL_IMAGE_MODELS, "fimg", prompt) : []),
+    ...(isHfEnabled() ? buildHfModelKeyboard(HF_IMAGE_MODELS, "hfimg", prompt) : []),
   ];
   await ctx.reply(`Pick a model for:\n_${prompt.substring(0, 100)}_`, {
     parse_mode: "Markdown",
@@ -645,8 +646,8 @@ bot.command("video", async (ctx) => {
     await ctx.reply("Usage: /video <description>");
     return;
   }
-  if (!isReplicateEnabled() && !isFalEnabled()) {
-    await ctx.reply("Video generation is not configured (REPLICATE_API_TOKEN or FAL_KEY needed).");
+  if (!isReplicateEnabled() && !isFalEnabled() && !isHfEnabled()) {
+    await ctx.reply("Video generation is not configured.");
     return;
   }
   const rows = [
