@@ -78,6 +78,11 @@ import {
   HF_IMAGE_MODELS,
   HF_VIDEO_MODELS,
 } from "./lib/higgsfield";
+import {
+  isSupadataEnabled,
+  getYouTubeTranscript,
+  extractYouTubeUrl,
+} from "./lib/supadata";
 
 // ============================================================
 // LOAD ENVIRONMENT
@@ -677,6 +682,35 @@ bot.command("hf", async (ctx) => {
   });
 });
 
+bot.command("transcript", async (ctx) => {
+  const url = ctx.message.text.replace(/^\/transcript\s*/i, "").trim();
+  if (!url) {
+    await ctx.reply("Usage: /transcript <youtube-url>");
+    return;
+  }
+  if (!isSupadataEnabled()) {
+    await ctx.reply("Supadata not configured (SUPADATA_API_KEY needed).");
+    return;
+  }
+  await ctx.replyWithChatAction("typing").catch(() => {});
+  try {
+    const result = await getYouTubeTranscript(url);
+    const MAX = 3800;
+    const body =
+      result.text.length > MAX
+        ? result.text.substring(0, MAX) +
+          `\n\n_(truncated — ${result.text.length} total chars)_`
+        : result.text;
+    await ctx
+      .reply(`*Transcript* (${result.lang})\n\n${body}`, {
+        parse_mode: "Markdown",
+      })
+      .catch(() => ctx.reply(`Transcript (${result.lang})\n\n${body}`));
+  } catch (err: any) {
+    await ctx.reply(`Transcript failed: ${err.message}`);
+  }
+});
+
 bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const chatId = ctx.chat.id.toString();
@@ -703,6 +737,24 @@ bot.on("message:text", async (ctx) => {
     })
     .catch(() => {});
 
+  // YouTube transcript enrichment (awaited inline; fails silently)
+  let enrichedText = text;
+  if (isSupadataEnabled()) {
+    const ytUrl = extractYouTubeUrl(text);
+    if (ytUrl) {
+      try {
+        const transcript = await getYouTubeTranscript(ytUrl);
+        const snippet = transcript.text.substring(0, 6000);
+        enrichedText = `${text}\n\n[YouTube transcript (${transcript.lang}) from ${ytUrl}]\n${snippet}`;
+        console.log(
+          `[Supadata] Enriched message with transcript (${transcript.text.length} chars)`
+        );
+      } catch (err: any) {
+        console.log(`[Supadata] Transcript fetch failed: ${err.message}`);
+      }
+    }
+  }
+
   const typingInterval = setInterval(() => {
     ctx.replyWithChatAction("typing").catch(() => {});
   }, 4000);
@@ -713,7 +765,7 @@ bot.on("message:text", async (ctx) => {
   try {
     if (isMacAlive()) {
       console.log("Routing to local machine...");
-      const localResult = await forwardToLocal(text, chatId, threadId);
+      const localResult = await forwardToLocal(enrichedText, chatId, threadId);
 
       if (localResult.async) {
         // Local accepted async — it handles processing + Telegram response
@@ -726,11 +778,11 @@ bot.on("message:text", async (ctx) => {
         console.log(
           `Local forwarding failed (${localResult.error}), processing on VPS...`
         );
-        response = await processOnVPS(text, chatId, ctx);
+        response = await processOnVPS(enrichedText, chatId, ctx);
       }
     } else {
       console.log("Local machine down, processing on VPS...");
-      response = await processOnVPS(text, chatId, ctx);
+      response = await processOnVPS(enrichedText, chatId, ctx);
     }
   } finally {
     clearInterval(typingInterval);
