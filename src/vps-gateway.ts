@@ -65,6 +65,8 @@ import {
   generateFalImage,
   generateFalVideo,
   downloadFalResult,
+  FAL_IMAGE_MODELS,
+  FAL_VIDEO_MODELS,
 } from "./lib/fal";
 
 // ============================================================
@@ -619,7 +621,7 @@ bot.command("imagine", async (ctx) => {
   }
   const rows = [
     ...(isReplicateEnabled() ? buildModelKeyboard(IMAGE_MODELS, "img", prompt) : []),
-    ...(isFalEnabled() ? buildFalModelKeyboard("image", "fimg", prompt) : []),
+    ...(isFalEnabled() ? buildFalModelKeyboard(FAL_IMAGE_MODELS, "fimg", prompt) : []),
   ];
   await ctx.reply(`Pick a model for:\n_${prompt.substring(0, 100)}_`, {
     parse_mode: "Markdown",
@@ -639,7 +641,7 @@ bot.command("video", async (ctx) => {
   }
   const rows = [
     ...(isReplicateEnabled() ? buildModelKeyboard(VIDEO_MODELS, "vid", prompt) : []),
-    ...(isFalEnabled() ? buildFalModelKeyboard("video", "fvid", prompt) : []),
+    ...(isFalEnabled() ? buildFalModelKeyboard(FAL_VIDEO_MODELS, "fvid", prompt) : []),
   ];
   await ctx.reply(`Pick a model for:\n_${prompt.substring(0, 100)}_`, {
     parse_mode: "Markdown",
