@@ -688,8 +688,8 @@ bot.on("message:text", async (ctx) => {
 
   await ctx.replyWithChatAction("typing").catch(() => {});
 
-  // Log incoming message
-  await supabase
+  // Log incoming message (fire-and-forget — don't block forwarding)
+  supabase
     .saveMessage({
       chat_id: chatId,
       role: "user",

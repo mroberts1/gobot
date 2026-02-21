@@ -1647,6 +1647,14 @@ async function processInBackground(
       response = await callClaude(text || "", targetChatId, "general", threadId);
     }
 
+    // Save assistant response to Supabase (fire-and-forget)
+    saveMessage({
+      chat_id: targetChatId,
+      role: "assistant",
+      content: response,
+      metadata: { processed_by: "local", source: "vps-forward", thread_id: threadId },
+    }).catch(() => {});
+
     // Send response directly to Telegram
     await sendDirectMessage(targetChatId, response, threadId);
     console.log(`/process completed for chat ${targetChatId} (${response.length} chars)`);
