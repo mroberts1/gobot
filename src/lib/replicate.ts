@@ -92,14 +92,6 @@ export const IMAGE_MODELS: Record<string, ModelPreset> = {
  * Video models — add/remove entries here to change what appears in /video.
  */
 export const VIDEO_MODELS: Record<string, ModelPreset> = {
-  "seedance-1-lite": {
-    label: "Seedance",
-    owner: "bytedance",
-    name: "seedance-1-lite",
-    type: "video",
-    inputFn: (prompt) => ({ prompt, duration: 5 }),
-    maxWaitMs: 300_000,
-  },
   "ltx-2-distilled": {
     label: "LTX-2",
     owner: "lightricks",
@@ -107,6 +99,14 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     type: "video",
     inputFn: (prompt) => ({ prompt, num_frames: 121 }),
     maxWaitMs: 180_000,
+  },
+  "sora-2": {
+    label: "Sora 2 🔊",
+    owner: "openai",
+    name: "sora-2",
+    type: "video",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 360_000,
   },
   "veo-2": {
     label: "Veo 2",
