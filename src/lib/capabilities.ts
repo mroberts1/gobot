@@ -26,6 +26,8 @@ const ALWAYS_AVAILABLE: string[] = [
   "Analyze images you send",
   "Transcribe and respond to voice messages",
   "Extract tasks from conversations and execute them after the call",
+  "Generate images with /imagine — pick model from Replicate or fal.ai",
+  "Generate videos with /video — pick model from Replicate or fal.ai",
 ];
 
 const HYBRID_ONLY: string[] = [
