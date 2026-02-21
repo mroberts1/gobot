@@ -5,30 +5,31 @@
 
 ## Repository & Git Workflow
 
-**Source of truth:** `autonomee/gobot` (GitHub organization repo)
-
 | Repo | Role | Status |
 |------|------|--------|
-| `autonomee/gobot` | Main repo — all work happens here | Active |
+| `autonomee/gobot` | Main upstream repo | Active |
+| `mroberts1/gobot` | Martin's fork — push here | Active |
 | `godagoo/gobot` | Personal archive (was the original) | Archived, read-only |
 
-### How to make changes (Goda):
+### How Martin makes changes:
 ```bash
-cd ~/development/gobot
-# Remote is already set to autonomee/gobot
-git pull origin master
+cd ~/GitHub/gobot
+git pull mroberts master
 # make changes...
 git add <files>
 git commit -m "description"
-git push origin master
+git push mroberts master   # pushes to mroberts1/gobot — no PR to autonomee needed
 ```
+
+### Remotes on this machine:
+- `mroberts` → `git@github.com:mroberts1/gobot.git` (push here)
+- `origin` → `git@github.com:autonomee/gobot.git` (no SSH write access)
 
 ### How community members contribute:
 1. Clone: `git clone https://github.com/autonomee/gobot.git`
 2. Create a branch: `git checkout -b fix/my-fix`
 3. Push branch: `git push origin fix/my-fix`
 4. Open PR on GitHub against `master`
-5. Goda reviews and merges
 
 ### Access:
 - **Autonomee Community team** (21 members) has **Write** access
