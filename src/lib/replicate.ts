@@ -46,6 +46,22 @@ export const IMAGE_MODELS: Record<string, ModelPreset> = {
     inputFn: (prompt) => ({ prompt, num_inference_steps: 28 }),
     maxWaitMs: 120_000,
   },
+  "nano-banana": {
+    label: "Nano Banana",
+    owner: "google",
+    name: "nano-banana",
+    type: "image",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 120_000,
+  },
+  "nano-banana-pro": {
+    label: "Nano Banana Pro",
+    owner: "google",
+    name: "nano-banana-pro",
+    type: "image",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 180_000,
+  },
 };
 
 /**
@@ -83,22 +99,6 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     type: "video",
     inputFn: (prompt) => ({ prompt }),
     maxWaitMs: 300_000,
-  },
-  "nano-banana": {
-    label: "Nano Banana",
-    owner: "google",
-    name: "nano-banana",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 300_000,
-  },
-  "nano-banana-pro": {
-    label: "Nano Banana Pro",
-    owner: "google",
-    name: "nano-banana-pro",
-    type: "video",
-    inputFn: (prompt) => ({ prompt }),
-    maxWaitMs: 360_000,
   },
 };
 
