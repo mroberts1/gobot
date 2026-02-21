@@ -48,6 +48,24 @@ import {
   stripAssetDescTag,
 } from "./lib/asset-store";
 import * as supabase from "./lib/supabase";
+import {
+  isReplicateEnabled,
+  buildModelKeyboard,
+  parseReplicateCallback,
+  generateImage,
+  generateVideo,
+  downloadResult,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+} from "./lib/replicate";
+import {
+  isFalEnabled,
+  buildFalModelKeyboard,
+  parseFalCallback,
+  generateFalImage,
+  generateFalVideo,
+  downloadFalResult,
+} from "./lib/fal";
 
 // ============================================================
 // LOAD ENVIRONMENT
@@ -589,6 +607,46 @@ bot.command("tasks", async (ctx) => {
     .catch(() => ctx.reply(status));
 });
 
+bot.command("imagine", async (ctx) => {
+  const prompt = ctx.message.text.replace(/^\/imagine\s*/i, "").trim();
+  if (!prompt) {
+    await ctx.reply("Usage: /imagine <description>");
+    return;
+  }
+  if (!isReplicateEnabled() && !isFalEnabled()) {
+    await ctx.reply("Image generation is not configured (REPLICATE_API_TOKEN or FAL_KEY needed).");
+    return;
+  }
+  const rows = [
+    ...(isReplicateEnabled() ? buildModelKeyboard(IMAGE_MODELS, "img", prompt) : []),
+    ...(isFalEnabled() ? buildFalModelKeyboard("image", "fimg", prompt) : []),
+  ];
+  await ctx.reply(`Pick a model for:\n_${prompt.substring(0, 100)}_`, {
+    parse_mode: "Markdown",
+    reply_markup: { inline_keyboard: rows },
+  });
+});
+
+bot.command("video", async (ctx) => {
+  const prompt = ctx.message.text.replace(/^\/video\s*/i, "").trim();
+  if (!prompt) {
+    await ctx.reply("Usage: /video <description>");
+    return;
+  }
+  if (!isReplicateEnabled() && !isFalEnabled()) {
+    await ctx.reply("Video generation is not configured (REPLICATE_API_TOKEN or FAL_KEY needed).");
+    return;
+  }
+  const rows = [
+    ...(isReplicateEnabled() ? buildModelKeyboard(VIDEO_MODELS, "vid", prompt) : []),
+    ...(isFalEnabled() ? buildFalModelKeyboard("video", "fvid", prompt) : []),
+  ];
+  await ctx.reply(`Pick a model for:\n_${prompt.substring(0, 100)}_`, {
+    parse_mode: "Markdown",
+    reply_markup: { inline_keyboard: rows },
+  });
+});
+
 bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const chatId = ctx.chat.id.toString();
@@ -1055,6 +1113,82 @@ bot.on("callback_query:data", async (ctx) => {
       ctx
     );
     await sendResponse(ctx, response);
+    return;
+  }
+
+  // Replicate image generation
+  if (data.startsWith("img:")) {
+    const parsed = parseReplicateCallback(data, "img");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating image with ${parsed.modelKey}...`).catch(() => {});
+    try {
+      const result = await generateImage(parsed.prompt, parsed.modelKey);
+      const buf = await downloadResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithPhoto(new InputFile(buf, "image.png"), {
+        caption: `${parsed.prompt}\n_${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Image generation failed: ${err.message}`).catch(() => {});
+    }
+    return;
+  }
+
+  // Replicate video generation
+  if (data.startsWith("vid:")) {
+    const parsed = parseReplicateCallback(data, "vid");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating video with ${parsed.modelKey}... (this takes a few minutes)`).catch(() => {});
+    try {
+      const result = await generateVideo(parsed.prompt, parsed.modelKey);
+      const buf = await downloadResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithVideo(new InputFile(buf, "video.mp4"), {
+        caption: `${parsed.prompt}\n_${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Video generation failed: ${err.message}`).catch(() => {});
+    }
+    return;
+  }
+
+  // fal.ai image generation
+  if (data.startsWith("fimg:")) {
+    const parsed = parseFalCallback(data, "fimg");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating image with ${parsed.modelKey}...`).catch(() => {});
+    try {
+      const result = await generateFalImage(parsed.prompt, parsed.modelKey);
+      const buf = await downloadFalResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithPhoto(new InputFile(buf, "image.png"), {
+        caption: `${parsed.prompt}\n_${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Image generation failed: ${err.message}`).catch(() => {});
+    }
+    return;
+  }
+
+  // fal.ai video generation
+  if (data.startsWith("fvid:")) {
+    const parsed = parseFalCallback(data, "fvid");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating video with ${parsed.modelKey}... (this takes a few minutes)`).catch(() => {});
+    try {
+      const result = await generateFalVideo(parsed.prompt, parsed.modelKey);
+      const buf = await downloadFalResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithVideo(new InputFile(buf, "video.mp4"), {
+        caption: `${parsed.prompt}\n_${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Video generation failed: ${err.message}`).catch(() => {});
+    }
     return;
   }
 
