@@ -68,6 +68,16 @@ import {
   FAL_IMAGE_MODELS,
   FAL_VIDEO_MODELS,
 } from "./lib/fal";
+import {
+  isHfEnabled,
+  buildHfModelKeyboard,
+  parseHfCallback,
+  generateHfImage,
+  generateHfVideo,
+  downloadHfResult,
+  HF_IMAGE_MODELS,
+  HF_VIDEO_MODELS,
+} from "./lib/higgsfield";
 
 // ============================================================
 // LOAD ENVIRONMENT
@@ -649,6 +659,23 @@ bot.command("video", async (ctx) => {
   });
 });
 
+bot.command("hf", async (ctx) => {
+  const prompt = ctx.message.text.replace(/^\/hf\s*/i, "").trim();
+  if (!prompt) {
+    await ctx.reply("Usage: /hf <description> — generates an image\nSend a photo with caption /hf <motion prompt> for image-to-video");
+    return;
+  }
+  if (!isHfEnabled()) {
+    await ctx.reply("Higgsfield is not configured (HIGGSFIELD_API_KEY needed).");
+    return;
+  }
+  const rows = buildHfModelKeyboard(HF_IMAGE_MODELS, "hfimg", prompt);
+  await ctx.reply(`Pick a Higgsfield image model for:\n_${prompt.substring(0, 100)}_`, {
+    parse_mode: "Markdown",
+    reply_markup: { inline_keyboard: rows },
+  });
+});
+
 bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const chatId = ctx.chat.id.toString();
@@ -736,7 +763,24 @@ bot.on("message:photo", async (ctx) => {
 
   const chatId = ctx.chat.id.toString();
   const threadId = ctx.message.message_thread_id;
-  const caption = ctx.message.caption || "User sent a photo. Describe and respond to it.";
+  const rawCaption = ctx.message.caption || "";
+
+  // Higgsfield image-to-video: photo with caption starting with /hf
+  if (rawCaption.match(/^\/hf\s*/i) && isHfEnabled()) {
+    const prompt = rawCaption.replace(/^\/hf\s*/i, "").trim() || "cinematic motion";
+    const photos = ctx.message.photo;
+    const largest = photos[photos.length - 1];
+    const file = await ctx.api.getFile(largest.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+    const rows = buildHfModelKeyboard(HF_VIDEO_MODELS, "hfvid", `${fileUrl}|||${prompt}`);
+    await ctx.reply(`Pick a Higgsfield video model for:\n_${prompt.substring(0, 100)}_`, {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard: rows },
+    });
+    return;
+  }
+
+  const caption = rawCaption || "User sent a photo. Describe and respond to it.";
 
   // Get highest resolution photo
   const photos = ctx.message.photo;
@@ -1190,6 +1234,49 @@ bot.on("callback_query:data", async (ctx) => {
       });
     } catch (err: any) {
       await ctx.editMessageText(`Video generation failed: ${err.message}`).catch(() => {});
+    }
+    return;
+  }
+
+  // Higgsfield image generation
+  if (data.startsWith("hfimg:")) {
+    const parsed = parseHfCallback(data, "hfimg");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating image with Higgsfield ${parsed.modelKey}...`).catch(() => {});
+    try {
+      const result = await generateHfImage(parsed.prompt, parsed.modelKey);
+      const buf = await downloadHfResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithPhoto(new InputFile(buf, "image.png"), {
+        caption: `${parsed.prompt}\n_Higgsfield ${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Higgsfield image failed: ${err.message}`).catch(() => {});
+    }
+    return;
+  }
+
+  // Higgsfield image-to-video generation
+  if (data.startsWith("hfvid:")) {
+    const parsed = parseHfCallback(data, "hfvid");
+    if (!parsed) { await ctx.editMessageText("Invalid callback.").catch(() => {}); return; }
+    // prompt is encoded as "imageUrl|||motionPrompt"
+    const sepIdx = parsed.prompt.indexOf("|||");
+    const imageUrl = sepIdx !== -1 ? parsed.prompt.substring(0, sepIdx) : "";
+    const motionPrompt = sepIdx !== -1 ? parsed.prompt.substring(sepIdx + 3) : parsed.prompt;
+    if (!imageUrl) { await ctx.editMessageText("Missing image URL.").catch(() => {}); return; }
+    await ctx.editMessageText(`Generating video with Higgsfield ${parsed.modelKey}...`).catch(() => {});
+    try {
+      const result = await generateHfVideo(motionPrompt, parsed.modelKey, imageUrl);
+      const buf = await downloadHfResult(result.url);
+      await ctx.deleteMessage().catch(() => {});
+      await ctx.replyWithVideo(new InputFile(buf, "video.mp4"), {
+        caption: `${motionPrompt}\n_Higgsfield ${parsed.modelKey} · ${(result.elapsedMs / 1000).toFixed(1)}s_`,
+        parse_mode: "Markdown",
+      });
+    } catch (err: any) {
+      await ctx.editMessageText(`Higgsfield video failed: ${err.message}`).catch(() => {});
     }
     return;
   }
