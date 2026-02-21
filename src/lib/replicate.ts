@@ -84,6 +84,22 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     inputFn: (prompt) => ({ prompt }),
     maxWaitMs: 300_000,
   },
+  "nano-banana": {
+    label: "Nano Banana",
+    owner: "google",
+    name: "nano-banana",
+    type: "video",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 300_000,
+  },
+  "nano-banana-pro": {
+    label: "Nano Banana Pro",
+    owner: "google",
+    name: "nano-banana-pro",
+    type: "video",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 360_000,
+  },
 };
 
 const POLL_INTERVAL_MS = 5_000;
