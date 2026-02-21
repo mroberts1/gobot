@@ -108,6 +108,14 @@ export const VIDEO_MODELS: Record<string, ModelPreset> = {
     inputFn: (prompt) => ({ prompt, num_frames: 121 }),
     maxWaitMs: 180_000,
   },
+  "veo-2": {
+    label: "Veo 2",
+    owner: "google",
+    name: "veo-2",
+    type: "video",
+    inputFn: (prompt) => ({ prompt }),
+    maxWaitMs: 300_000,
+  },
   "veo-3": {
     label: "Veo 3 🔊",
     owner: "google",
