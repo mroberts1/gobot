@@ -1656,7 +1656,7 @@ async function processInBackground(
       metadata: { processed_by: "local", source: "vps-forward", thread_id: threadId },
     }).catch(() => {});
 
-    // Send TTS voice reply if this was a forwarded voice message
+    // Send TTS voice reply if this was a forwarded voice message; fall back to text if TTS fails
     if (isVoice && isVoiceEnabled()) {
       const audioBuffer = await textToSpeech(response);
       if (audioBuffer) {
@@ -1665,10 +1665,12 @@ async function processInBackground(
             message_thread_id: threadId,
           })
           .catch((err) => console.error("TTS voice reply failed:", err.message));
+        console.log(`/process completed for chat ${targetChatId} (voice reply)`);
+        return;
       }
     }
 
-    // Send response directly to Telegram
+    // Send response as text (non-voice messages, or TTS fallback)
     await sendDirectMessage(targetChatId, response, threadId);
     console.log(`/process completed for chat ${targetChatId} (${response.length} chars)`);
   } catch (err) {

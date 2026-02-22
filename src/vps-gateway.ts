@@ -1055,7 +1055,7 @@ bot.on("message:voice", async (ctx) => {
         })
         .catch(() => {});
 
-      // Reply with voice + text
+      // Reply with voice only; fall back to text if TTS fails
       const audioBuffer = await textToSpeech(response);
       if (audioBuffer) {
         await ctx
@@ -1063,8 +1063,9 @@ bot.on("message:voice", async (ctx) => {
           .catch((err) => {
             console.error("Failed to send voice reply:", err.message);
           });
+      } else {
+        await sendResponse(ctx, response);
       }
-      await sendResponse(ctx, response);
     } catch (error: any) {
       console.error("Voice processing error:", error);
       await ctx
