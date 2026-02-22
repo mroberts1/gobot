@@ -1570,7 +1570,8 @@ async function processInBackground(
   text: string | undefined,
   chatId: string | undefined,
   threadId: number | undefined,
-  photoFileId: string | undefined
+  photoFileId: string | undefined,
+  isVoice?: boolean
 ): Promise<void> {
   const targetChatId = chatId || "";
   if (!targetChatId) {
@@ -1655,6 +1656,18 @@ async function processInBackground(
       metadata: { processed_by: "local", source: "vps-forward", thread_id: threadId },
     }).catch(() => {});
 
+    // Send TTS voice reply if this was a forwarded voice message
+    if (isVoice && isVoiceEnabled()) {
+      const audioBuffer = await textToSpeech(response);
+      if (audioBuffer) {
+        await bot.api
+          .sendVoice(targetChatId, new InputFile(audioBuffer, "response.wav"), {
+            message_thread_id: threadId,
+          })
+          .catch((err) => console.error("TTS voice reply failed:", err.message));
+      }
+    }
+
     // Send response directly to Telegram
     await sendDirectMessage(targetChatId, response, threadId);
     console.log(`/process completed for chat ${targetChatId} (${response.length} chars)`);
@@ -1709,10 +1722,10 @@ const healthServer = Bun.serve({
         return Response.json({ error: "Invalid JSON body" }, { status: 400 });
       }
 
-      const { text, chatId, threadId, photoFileId } = body;
+      const { text, chatId, threadId, photoFileId, isVoice } = body;
 
       // Return 202 immediately — process in background
-      processInBackground(text, chatId, threadId, photoFileId).catch((err) => {
+      processInBackground(text, chatId, threadId, photoFileId, isVoice).catch((err) => {
         console.error("/process background error:", err);
       });
 

@@ -161,7 +161,8 @@ async function forwardToLocal(
   text: string,
   chatId: string,
   threadId?: number,
-  photoFileId?: string
+  photoFileId?: string,
+  isVoice?: boolean
 ): Promise<LocalResponse> {
   if (!MAC_PROCESS_URL) {
     return { success: false, error: "MAC_PROCESS_URL not configured" };
@@ -173,6 +174,7 @@ async function forwardToLocal(
 
     const payload: Record<string, any> = { text, chatId, threadId };
     if (photoFileId) payload.photoFileId = photoFileId;
+    if (isVoice) payload.isVoice = true;
 
     const res = await fetch(MAC_PROCESS_URL, {
       method: "POST",
@@ -1019,7 +1021,7 @@ bot.on("message:voice", async (ctx) => {
       try {
         const voiceText = `[Voice message transcription]: ${transcription}`;
         if (isMacAlive()) {
-          const localResult = await forwardToLocal(voiceText, chatId, threadId);
+          const localResult = await forwardToLocal(voiceText, chatId, threadId, undefined, true);
           if (localResult.async) {
             // Local accepted async — it handles processing + Telegram response
             clearInterval(typingInterval);
