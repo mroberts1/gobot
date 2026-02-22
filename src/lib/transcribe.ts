@@ -34,7 +34,7 @@ export async function transcribeAudio(filePath: string): Promise<string> {
     const mimeType = mimeMap[ext] || "audio/ogg";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,7 +84,7 @@ export async function transcribeAudioBuffer(
     const base64Audio = audioBuffer.toString("base64");
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
