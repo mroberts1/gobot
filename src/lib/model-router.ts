@@ -5,7 +5,7 @@
  * into a standalone module. Used by both the legacy processor
  * and the new Agent SDK session manager.
  *
- * Distribution target: ~60% Haiku, ~30% Sonnet, ~10% Opus
+ * Distribution target: ~80% Haiku, ~20% Sonnet (Opus disabled for cost)
  */
 
 // ============================================================
@@ -76,8 +76,8 @@ export function classifyComplexity(message: string): ModelTier {
     if (pattern.test(message)) return "haiku";
   }
 
-  // Short messages (< 40 chars) → Haiku
-  if (message.length < 40) return "haiku";
+  // Short messages (< 80 chars) → Haiku
+  if (message.length < 80) return "haiku";
 
   // Medium-length or unclear → Sonnet (good default)
   return "sonnet";
@@ -92,11 +92,8 @@ export function selectModelForMessage(
 ): { tier: ModelTier; model: string } {
   const tier = classifyComplexity(message);
 
-  // Downgrade Opus → Sonnet if budget is running low (< $1 remaining)
-  const effectiveTier =
-    tier === "opus" && budgetRemaining !== undefined && budgetRemaining < 1.0
-      ? "sonnet"
-      : tier;
+  // Cap at Sonnet — Opus disabled for cost control
+  const effectiveTier = tier === "opus" ? "sonnet" : tier;
 
   return {
     tier: effectiveTier,
